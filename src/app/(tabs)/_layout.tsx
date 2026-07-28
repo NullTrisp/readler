@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
+import { SymbolView } from 'expo-symbols';
 import { useTranslation } from 'react-i18next';
 
 import { useReadlerTheme } from '@/components/readler-ui';
@@ -15,9 +15,30 @@ export default function TabsLayout() {
       headerStyle: { backgroundColor: colors.surface },
       headerTintColor: colors.onSurface,
     }}>
-      <Tabs.Screen name="index" options={{ title: t('library'), tabBarIcon: ({ color }) => <Text style={{ color }}>▦</Text> }} />
-      <Tabs.Screen name="downloads" options={{ title: t('downloads'), tabBarIcon: ({ color }) => <Text style={{ color }}>↓</Text> }} />
-      <Tabs.Screen name="settings" options={{ title: t('settings'), tabBarIcon: ({ color }) => <Text style={{ color }}>⚙</Text> }} />
+      <Tabs.Screen name="index" options={{
+        title: t('library'),
+        tabBarIcon: ({ color, size }) => <SymbolView
+          name={{ ios: 'books.vertical.fill', android: 'local_library', web: 'local_library' }}
+          tintColor={color}
+          size={size}
+        />,
+      }} />
+      <Tabs.Screen name="downloads" options={{
+        title: t('downloads'),
+        tabBarIcon: ({ color, size }) => <SymbolView
+          name={{ ios: 'arrow.down.to.line', android: 'download', web: 'download' }}
+          tintColor={color}
+          size={size}
+        />,
+      }} />
+      <Tabs.Screen name="settings" options={{
+        title: t('settings'),
+        tabBarIcon: ({ color, size }) => <SymbolView
+          name={{ ios: 'gearshape.fill', android: 'settings', web: 'settings' }}
+          tintColor={color}
+          size={size}
+        />,
+      }} />
     </Tabs>
   );
 }

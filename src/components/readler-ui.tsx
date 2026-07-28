@@ -1,4 +1,5 @@
 import type { PropsWithChildren, ReactNode } from 'react';
+import { SymbolView } from 'expo-symbols';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useColorScheme, type TextProps, type ViewStyle } from 'react-native';
 
 export const palette = {
@@ -90,7 +91,12 @@ export function Loading() {
 
 export function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   const colors = useReadlerTheme();
-  return <View style={styles.empty}><Text style={[styles.emptyIcon, { color: colors.primary }]}>◫</Text><AppText title>{title}</AppText><AppText muted style={{ textAlign: 'center' }}>{body}</AppText>{action}</View>;
+  return <View style={styles.empty}><SymbolView
+    accessible={false}
+    name={{ ios: 'books.vertical', android: 'local_library', web: 'local_library' }}
+    size={52}
+    tintColor={colors.primary}
+  /><AppText title>{title}</AppText><AppText muted style={{ textAlign: 'center' }}>{body}</AppText>{action}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -102,5 +108,4 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 },
-  emptyIcon: { fontSize: 52 },
 });

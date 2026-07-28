@@ -57,10 +57,23 @@ Purpose: explain the value in one glance and get the first source connected.
 Purpose: scan, filter, and open all known books.
 
 - Search is first, followed by horizontally scrollable filter chips for format, source, reading status, and folder.
+- The default library view mirrors the source file hierarchy. Show direct child folders before direct child books, preserve the current folder while filters change, and expose a breadcrumb back to the library root. Search spans all known books, includes each result's relative path, and returns to the previous folder when the query is cleared.
+- Folder cards show a recursive supported-book count. Empty physical folders do not need to appear because Readler indexes supported files rather than modifying or mirroring the user's filesystem.
 - Books appear in an adaptive cover grid. Each card shows cover or format placeholder, title, author or path, progress bar, and percentage.
+- Metadata filters may use normalized title, author, series, publisher, publication date, language, subjects, page count, filename, size, modification date, source, format, and reading status. Only facets with known values are shown.
+- Sorting supports at least title, author, series/issue, last modified, and reading progress. Folder navigation remains alphabetical and folders always precede books.
 - Pull to refresh synchronizes sources. Existing local content remains visible while refresh is in progress.
 - Empty state includes both Drive and local-source actions. A no-results state caused by filters should offer a clear way to reset filters rather than imply the library is empty.
 - Cover art uses a portrait ratio of approximately `0.72`; placeholders use the same footprint to keep the grid stable.
+
+#### Library metadata and cover lifecycle
+
+- Metadata enrichment is independent from the reader and runs in the background after a local file becomes available. A metadata or cover failure never blocks opening other books.
+- CBZ reads `ComicInfo.xml` when present and uses the first image in natural filename order as its cover. EPUB reads package metadata and its declared cover. PDF reads document metadata and renders page 1 where the platform provides a safe renderer.
+- Generated raster previews are reduced where the platform renderer supports it and always use stable local references. Persisted native cover files have a strict size cap. Temporary extraction paths, browser `blob:` URLs, and reader-owned resources must never be persisted as `coverUri`.
+- A source thumbnail, such as a Google Drive preview, is provisional. Once the book is downloaded, locally extracted metadata and the exact first-page cover replace it.
+- Enrichment is keyed to the source file fingerprint (`providerKey`, size, and modification time). Rescanning an unchanged file preserves enriched metadata; changing the file invalidates and regenerates it.
+- Readler never writes metadata or cover changes back to the source file.
 
 ### Downloads
 
