@@ -1,13 +1,13 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { AppText, Button, Card, EmptyState, Screen, useReadlerTheme } from '@/components/readler-ui';
 import type { ContentFormat, ReadingStatus } from '@/domain/models';
 import { startDownload } from '@/services/downloads';
-import { useApp } from '@/state/app-provider';
+import { canLinkFolder, useApp } from '@/state/app-provider';
 import { libraryFolders, matchesLibraryItem } from '@/utils/library-filter';
 
 export default function LibraryScreen() {
@@ -49,7 +49,7 @@ export default function LibraryScreen() {
     </View>
     <FlatList key={`columns-${columns}`} data={visible} numColumns={columns} keyExtractor={(item) => item.id} columnWrapperStyle={styles.row} contentContainerStyle={visible.length ? styles.grid : { flexGrow: 1 }}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void sync()} tintColor={colors.primary} />}
-      ListEmptyComponent={<EmptyState title={t('emptyLibrary')} body={t('emptyLibraryHint')} action={<View style={styles.emptyActions}><Button onPress={() => router.push('/drive')}>{t('connectDrive')}</Button><Button secondary onPress={() => void (Platform.OS === 'android' ? linkFolder() : importFiles())}>{Platform.OS === 'android' ? t('linkFolder') : t('importFiles')}</Button></View>} />}
+      ListEmptyComponent={<EmptyState title={t('emptyLibrary')} body={t('emptyLibraryHint')} action={<View style={styles.emptyActions}><Button onPress={() => router.push('/drive')}>{t('connectDrive')}</Button><Button secondary onPress={() => void (canLinkFolder ? linkFolder() : importFiles())}>{canLinkFolder ? t('linkFolder') : t('importFiles')}</Button></View>} />}
       renderItem={({ item }) => <Pressable style={styles.item} onPress={() => void open(item.id)}><Card style={styles.bookCard}>
         {item.coverUri ? <Image source={{ uri: item.coverUri }} style={styles.cover} contentFit="cover" /> : <View style={[styles.cover, styles.placeholder, { backgroundColor: colors.primaryContainer }]}><AppText style={[styles.format, { color: colors.onPrimaryContainer }]}>{item.format.toUpperCase()}</AppText></View>}
         <View style={styles.bookCopy}><AppText numberOfLines={2} style={{ fontWeight: '700' }}>{item.title}</AppText><AppText muted numberOfLines={1}>{item.author ?? item.relativePath}</AppText>

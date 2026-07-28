@@ -1,11 +1,11 @@
 import { router } from 'expo-router';
-import { Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText, Button, Screen, useReadlerTheme } from '@/components/readler-ui';
 import { setSetting } from '@/data/repository';
-import { useApp } from '@/state/app-provider';
+import { canLinkFolder, useApp } from '@/state/app-provider';
 
 export default function OnboardingScreen() {
   const { t } = useTranslation();
@@ -13,7 +13,7 @@ export default function OnboardingScreen() {
   const { importFiles, linkFolder, loading } = useApp();
 
   const local = async () => {
-    if (Platform.OS === 'android') await linkFolder(); else await importFiles();
+    if (canLinkFolder) await linkFolder(); else await importFiles();
     router.replace('/(tabs)');
   };
   const skip = async () => {

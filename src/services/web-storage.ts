@@ -15,13 +15,21 @@ function database() {
 }
 
 export async function putBrowserFile(key: string, value: Blob) {
+  return putBrowserValue(key, value);
+}
+
+export async function putBrowserValue(key: string, value: unknown) {
   const db = await database();
   await requestResult(db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).put(value, key));
 }
 
 export async function getBrowserFile(key: string) {
+  return getBrowserValue<Blob>(key);
+}
+
+export async function getBrowserValue<T>(key: string) {
   const db = await database();
-  return requestResult<Blob | undefined>(db.transaction(STORE_NAME).objectStore(STORE_NAME).get(key));
+  return requestResult<T | undefined>(db.transaction(STORE_NAME).objectStore(STORE_NAME).get(key));
 }
 
 export async function deleteBrowserFile(key: string) {
