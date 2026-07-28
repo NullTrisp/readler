@@ -1,5 +1,6 @@
 export type ContentFormat = 'cbz' | 'epub' | 'pdf';
 export type SourceKind = 'drive' | 'android-folder' | 'ios-import' | 'web-import';
+export type LibraryMode = 'local' | 'drive';
 export type ReadingStatus = 'unread' | 'reading' | 'finished';
 export type DownloadStatus = 'none' | 'queued' | 'downloading' | 'paused' | 'ready' | 'error';
 
@@ -135,4 +136,15 @@ export interface LibraryFilter {
 export function formatFromName(name: string): ContentFormat | null {
   const extension = name.toLowerCase().split('.').pop();
   return extension === 'cbz' || extension === 'epub' || extension === 'pdf' ? extension : null;
+}
+
+export function sourceMatchesLibraryMode(kind: SourceKind, mode: LibraryMode | null) {
+  return mode !== null && (kind === 'drive') === (mode === 'drive');
+}
+
+export function resolveLibraryMode(stored: string | null, sources: readonly Pick<ContentSourceRecord, 'kind'>[]) {
+  if (stored === 'local' || stored === 'drive') return stored;
+  const hasDrive = sources.some((source) => source.kind === 'drive');
+  const hasLocal = sources.some((source) => source.kind !== 'drive');
+  return hasDrive === hasLocal ? null : hasDrive ? 'drive' : 'local';
 }

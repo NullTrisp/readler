@@ -13,8 +13,8 @@ export default function OnboardingScreen() {
   const { importFiles, linkFolder, loading } = useApp();
 
   const local = async () => {
-    if (canLinkFolder) await linkFolder(); else await importFiles();
-    router.replace('/(tabs)');
+    const connected = canLinkFolder ? await linkFolder() : await importFiles();
+    if (connected) router.replace('/(tabs)');
   };
   const skip = async () => {
     await setSetting('onboardingComplete', 'true');
@@ -26,7 +26,7 @@ export default function OnboardingScreen() {
     <View style={styles.copy}><AppText title style={styles.heading}>{t('onboardingTitle')}</AppText><AppText muted style={styles.body}>{t('onboardingBody')}</AppText></View>
     <View style={styles.actions}>
       <Button disabled={loading} onPress={() => router.push('/drive')}>{t('startDrive')}</Button>
-      <Button disabled={loading} secondary onPress={() => void local()}>{t('startLocal')}</Button>
+      <Button loading={loading} secondary onPress={() => void local()}>{t('startLocal')}</Button>
       <Button disabled={loading} secondary onPress={() => void skip()}>{t('skip')}</Button>
     </View>
   </SafeAreaView></Screen>;

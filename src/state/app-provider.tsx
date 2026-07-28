@@ -4,14 +4,23 @@ import { AppState, Platform } from 'react-native';
 
 import { getDatabase } from '@/data/database';
 import {
+  getSetting,
   listLibrary,
   listSources,
   removeSource,
   setSetting,
   updateItemMetadata,
 } from '@/data/repository';
-import type { ContentSourceRecord, LibraryFilter, LibraryItem } from '@/domain/models';
+import {
+  resolveLibraryMode,
+  sourceMatchesLibraryMode,
+  type ContentSourceRecord,
+  type LibraryFilter,
+  type LibraryItem,
+  type LibraryMode,
+} from '@/domain/models';
 import { connectDriveFolder, scanDriveSource, signOutDrive, type DriveFolder } from '@/services/drive';
+import { pauseDownload } from '@/services/downloads';
 import { disconnectLocalSource, importLocalFiles, linkAndroidFolder, materializeLocalItem, scanLocalSource } from '@/services/local-source';
 import { extractBookMetadata } from '@/services/book-metadata';
 import { syncReadingState } from '@/services/sync';
@@ -28,12 +37,14 @@ interface AppContextValue {
   ready: boolean;
   loading: boolean;
   error: string | null;
+  mode: LibraryMode | null;
   items: LibraryItem[];
   sources: ContentSourceRecord[];
   refresh(filter?: LibraryFilter): Promise<void>;
   refreshSources(): Promise<void>;
-  importFiles(): Promise<void>;
-  linkFolder(): Promise<void>;
+  importFiles(): Promise<boolean>;
+  linkFolder(): Promise<boolean>;
+  changeLibraryMode(mode: LibraryMode): Promise<void>;
   connectDrive(folder: DriveFolder, accountId: string): Promise<void>;
   disconnectSource(source: ContentSourceRecord): Promise<void>;
   sync(): Promise<void>;
@@ -47,24 +58,48 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<LibraryMode | null>(null);
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [sources, setSources] = useState<ContentSourceRecord[]>([]);
+  const modeRef = useRef<LibraryMode | null>(null);
   const enrichingMetadata = useRef(false);
   const attemptedMetadata = useRef(new Set<string>());
 
   const refresh = useCallback(async (filter: LibraryFilter = {}) => {
-    setItems(await listLibrary(filter));
+    const activeMode = modeRef.current;
+    setItems(activeMode ? (await listLibrary(filter)).filter((item) => sourceMatchesLibraryMode(item.sourceKind, activeMode)) : []);
   }, []);
 
   const refreshSources = useCallback(async () => {
-    setSources(await listSources());
+    const activeMode = modeRef.current;
+    setSources(activeMode ? (await listSources()).filter((source) => sourceMatchesLibraryMode(source.kind, activeMode)) : []);
   }, []);
 
-  const run = useCallback(async (operation: () => Promise<void>) => {
+  const loadModeState = useCallback(async (activeMode: LibraryMode | null) => {
+    if (!activeMode) {
+      setItems([]);
+      setSources([]);
+      return;
+    }
+    const [nextItems, nextSources] = await Promise.all([listLibrary(), listSources()]);
+    setItems(nextItems.filter((item) => sourceMatchesLibraryMode(item.sourceKind, activeMode)));
+    setSources(nextSources.filter((source) => sourceMatchesLibraryMode(source.kind, activeMode)));
+  }, []);
+
+  const activateMode = useCallback(async (nextMode: LibraryMode) => {
+    await setSetting('libraryMode', nextMode);
+    modeRef.current = nextMode;
+    setItems([]);
+    setSources([]);
+    setMode(nextMode);
+    await loadModeState(nextMode);
+  }, [loadModeState]);
+
+  const run = useCallback(async <T,>(operation: () => Promise<T>) => {
     setLoading(true);
     setError(null);
     try {
-      await operation();
+      return await operation();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       throw caught;
@@ -76,10 +111,18 @@ export function AppProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void (async () => {
       await getDatabase();
-      await Promise.all([refresh(), refreshSources()]);
+      const [storedMode, allSources] = await Promise.all([getSetting('libraryMode'), listSources()]);
+      const activeMode = resolveLibraryMode(storedMode, allSources);
+      if (activeMode && activeMode !== storedMode) await setSetting('libraryMode', activeMode);
+      modeRef.current = activeMode;
+      setMode(activeMode);
+      setSources(allSources.filter((source) => sourceMatchesLibraryMode(source.kind, activeMode)));
+      setItems(activeMode
+        ? (await listLibrary()).filter((item) => sourceMatchesLibraryMode(item.sourceKind, activeMode))
+        : []);
       setReady(true);
     })();
-  }, [refresh, refreshSources]);
+  }, []);
 
   useEffect(() => {
     if (!ready || enrichingMetadata.current) return;
@@ -137,37 +180,65 @@ export function AppProvider({ children }: PropsWithChildren) {
     return () => subscription.remove();
   }, [refresh, refreshSources, sources]);
 
+  const changeLibraryMode = useCallback(
+    (nextMode: LibraryMode) => run(async () => {
+      if (modeRef.current === nextMode) return;
+      if (modeRef.current === 'drive' && nextMode === 'local') {
+        await Promise.all(items.filter((item) => item.downloadStatus === 'downloading').map((item) => pauseDownload(item.id)));
+      }
+      await activateMode(nextMode);
+      router.replace('/(tabs)');
+    }),
+    [activateMode, items, router, run],
+  );
+
   const importFiles = useCallback(
-    () => run(async () => { await importLocalFiles(); await setSetting('onboardingComplete', 'true'); await Promise.all([refresh(), refreshSources()]); }),
-    [refresh, refreshSources, run],
+    () => run(async () => {
+      if (modeRef.current === 'drive') return false;
+      const source = await importLocalFiles();
+      if (!source) return false;
+      await setSetting('onboardingComplete', 'true');
+      await activateMode('local');
+      return true;
+    }),
+    [activateMode, run],
   );
 
   const linkFolder = useCallback(
-    () => run(async () => { await linkAndroidFolder(); await setSetting('onboardingComplete', 'true'); await Promise.all([refresh(), refreshSources()]); }),
-    [refresh, refreshSources, run],
+    () => run(async () => {
+      if (modeRef.current === 'drive') return false;
+      const source = await linkAndroidFolder();
+      if (!source) return false;
+      await setSetting('onboardingComplete', 'true');
+      await activateMode('local');
+      return true;
+    }),
+    [activateMode, run],
   );
 
   const connectDrive = useCallback(
     (folder: DriveFolder, accountId: string) => run(async () => {
-      const existing = sources.find((source) => source.kind === 'drive');
+      if (modeRef.current === 'local') return;
+      const existing = (await listSources()).find((source) => source.kind === 'drive');
       if (existing) await removeSource(existing.id);
       const source = await connectDriveFolder(folder, accountId);
       await setSetting('onboardingComplete', 'true');
       await syncReadingState(source);
-      await Promise.all([refresh(), refreshSources()]);
+      await activateMode('drive');
       router.replace('/');
     }),
-    [refresh, refreshSources, router, run, sources],
+    [activateMode, router, run],
   );
 
   const disconnectSource = useCallback(
     (source: ContentSourceRecord) => run(async () => {
+      if (!sourceMatchesLibraryMode(source.kind, modeRef.current)) return;
       if (source.kind === 'drive') await signOutDrive(false);
       else await disconnectLocalSource(source);
       await removeSource(source.id);
-      await Promise.all([refresh(), refreshSources()]);
+      await loadModeState(modeRef.current);
     }),
-    [refresh, refreshSources, run],
+    [loadModeState, run],
   );
 
   const sync = useCallback(
@@ -182,15 +253,15 @@ export function AppProvider({ children }: PropsWithChildren) {
           await scanLocalSource(source);
         }
       }
-      await refresh();
+      await Promise.all([refresh(), refreshSources()]);
     }),
-    [refresh, run, sources],
+    [refresh, refreshSources, run, sources],
   );
 
   const value = useMemo<AppContextValue>(() => ({
-    ready, loading, error, items, sources, refresh, refreshSources, importFiles,
-    linkFolder, connectDrive, disconnectSource, sync, clearError: () => setError(null),
-  }), [ready, loading, error, items, sources, refresh, refreshSources, importFiles, linkFolder, connectDrive, disconnectSource, sync]);
+    ready, loading, error, mode, items, sources, refresh, refreshSources, importFiles,
+    linkFolder, changeLibraryMode, connectDrive, disconnectSource, sync, clearError: () => setError(null),
+  }), [ready, loading, error, mode, items, sources, refresh, refreshSources, importFiles, linkFolder, changeLibraryMode, connectDrive, disconnectSource, sync]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

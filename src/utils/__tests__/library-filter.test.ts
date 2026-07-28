@@ -1,4 +1,4 @@
-import type { LibraryItem } from '@/domain/models';
+import { resolveLibraryMode, sourceMatchesLibraryMode, type LibraryItem } from '@/domain/models';
 import {
   libraryBreadcrumbs,
   libraryFolderContents,
@@ -20,17 +20,16 @@ const item: LibraryItem = {
 };
 
 const filter = {
-  query: '', format: 'all', source: 'all', folder: 'all', status: 'all',
+  query: '', format: 'all', folder: 'all', status: 'all',
 } as const;
 
 describe('library filters', () => {
-  it('combines accent-insensitive metadata search, format, source, folder, and reading state', () => {
+  it('combines accent-insensitive metadata search, format, folder, and reading state', () => {
     expect(matchesLibraryItem(item, {
-      query: 'garcia realismo 1967', format: 'epub', source: 'drive', folder: 'Novelas', status: 'reading',
+      query: 'garcia realismo 1967', format: 'epub', folder: 'Novelas', status: 'reading',
       series: 'GRANDES NOVELAS', language: 'ES', subject: 'realismo magico',
     })).toBe(true);
     expect(matchesLibraryItem(item, { ...filter, format: 'pdf' })).toBe(false);
-    expect(matchesLibraryItem(item, { ...filter, source: 'local' })).toBe(false);
     expect(matchesLibraryItem(item, { ...filter, folder: 'Novel' })).toBe(false);
   });
 
@@ -38,6 +37,22 @@ describe('library filters', () => {
     expect(libraryFolders([item, { ...item, id: '2', relativePath: 'Zeta/two.pdf' }])).toEqual([
       'Novelas/Latinoamérica', 'Zeta',
     ]);
+  });
+});
+
+describe('library mode', () => {
+  it('uses a saved choice, infers a single source family, and leaves mixed libraries unconfigured', () => {
+    const local = { kind: 'web-import' as const };
+    const drive = { kind: 'drive' as const };
+    const localKinds = ['android-folder', 'ios-import', 'web-import'] as const;
+    expect(resolveLibraryMode('drive', [local])).toBe('drive');
+    expect(resolveLibraryMode(null, [local])).toBe('local');
+    expect(resolveLibraryMode(null, [drive])).toBe('drive');
+    expect(resolveLibraryMode(null, [local, drive])).toBeNull();
+    expect(resolveLibraryMode(null, [])).toBeNull();
+    expect(localKinds.every((kind) => sourceMatchesLibraryMode(kind, 'local'))).toBe(true);
+    expect(sourceMatchesLibraryMode('drive', 'local')).toBe(false);
+    expect(sourceMatchesLibraryMode('drive', null)).toBe(false);
   });
 });
 

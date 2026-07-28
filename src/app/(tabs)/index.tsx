@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useMemo, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -13,10 +14,9 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { useTranslation } from 'react-i18next';
 
-import { AppText, Button, Screen, useReadlerTheme } from '@/components/readler-ui';
 import { BookCover } from '@/components/library/book-cover';
+import { AppText, Button, Screen, useReadlerTheme } from '@/components/readler-ui';
 import type { ContentFormat, LibraryItem, ReadingStatus } from '@/domain/models';
 import { startDownload } from '@/services/downloads';
 import { canLinkFolder, useApp } from '@/state/app-provider';
@@ -30,7 +30,6 @@ import {
   type VisibleLibraryFilter,
 } from '@/utils/library-filter';
 
-type SourceFilter = 'all' | 'drive' | 'local';
 type MetadataFilter = string | 'all';
 type IconName = SymbolViewProps['name'];
 
@@ -51,11 +50,12 @@ export default function LibraryScreen() {
     sync,
     importFiles,
     linkFolder,
+    mode,
+    changeLibraryMode,
     clearError,
   } = useApp();
   const [query, setQuery] = useState('');
   const [format, setFormat] = useState<ContentFormat | 'all'>('all');
-  const [source, setSource] = useState<SourceFilter>('all');
   const [status, setStatus] = useState<ReadingStatus | 'all'>('all');
   const [series, setSeries] = useState<MetadataFilter>('all');
   const [language, setLanguage] = useState<MetadataFilter>('all');
@@ -63,6 +63,9 @@ export default function LibraryScreen() {
   const [location, setLocation] = useState<LibraryLocation>(ROOT_LOCATION);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [downloadingIds, setDownloadingIds] = useState<string[]>([]);
+  const [downloadNotice, setDownloadNotice] = useState<{ message: string; loading: boolean } | null>(null);
+  const activeLocation = location.sourceId && !sources.some((source) => source.id === location.sourceId) ? ROOT_LOCATION : location;
 
   const columns = width >= 1400 ? 6 : width >= 1000 ? 4 : width >= 700 ? 3 : 2;
   const contentWidth = Math.min(width, CONTENT_MAX_WIDTH);
@@ -79,19 +82,18 @@ export default function LibraryScreen() {
     query: '',
     format,
     status,
-    source,
     folder: 'all',
     series: series === 'all' ? undefined : series,
     language: language === 'all' ? undefined : language,
-  }), [format, language, series, source, status]);
+  }), [format, language, series, status]);
 
   const facetMatches = useMemo(
     () => items.filter((item) => matchesLibraryItem(item, baseFilter)),
     [baseFilter, items],
   );
   const folderContents = useMemo(
-    () => libraryFolderContents(facetMatches, location),
-    [facetMatches, location],
+    () => libraryFolderContents(facetMatches, activeLocation),
+    [activeLocation, facetMatches],
   );
   const searching = query.trim().length > 0;
   const visibleBooks = useMemo(() => {
@@ -103,17 +105,16 @@ export default function LibraryScreen() {
   const visibleFolders = searching ? [] : folderContents.folders;
 
   const advancedFilterCount = Number(status !== 'all') + Number(series !== 'all') + Number(language !== 'all');
-  const anyFilterActive = format !== 'all' || source !== 'all' || advancedFilterCount > 0;
-  const allActive = !anyFilterActive && location.sourceId === null && location.path === '';
-  const sourceAtLocation = sources.find((candidate) => candidate.id === location.sourceId);
+  const anyFilterActive = format !== 'all' || advancedFilterCount > 0;
+  const allActive = !anyFilterActive && activeLocation.sourceId === null && activeLocation.path === '';
+  const sourceAtLocation = sources.find((candidate) => candidate.id === activeLocation.sourceId);
   const breadcrumbParts = useMemo(() => {
-    if (!location.sourceId) return [];
-    return libraryBreadcrumbs(location).filter((part) => part.path.length > 0);
-  }, [location]);
+    if (!activeLocation.sourceId) return [];
+    return libraryBreadcrumbs(activeLocation).filter((part) => part.path.length > 0);
+  }, [activeLocation]);
 
   const resetFilters = () => {
     setFormat('all');
-    setSource('all');
     setStatus('all');
     setSeries('all');
     setLanguage('all');
@@ -124,18 +125,21 @@ export default function LibraryScreen() {
     setLocation(ROOT_LOCATION);
   };
 
-  const selectSource = (value: SourceFilter) => {
-    setSource((current) => current === value ? 'all' : value);
-    setLocation(ROOT_LOCATION);
-  };
-
   const open = async (item: LibraryItem) => {
     if (openingId) return;
     setOpeningId(item.id);
     try {
       if (item.sourceKind === 'drive' && !item.localUri) {
-        await startDownload(item, () => void refresh());
-        await refresh();
+        setDownloadingIds((ids) => [...ids, item.id]);
+        setDownloadNotice({ message: t('downloadStarted', { title: item.title }), loading: true });
+        void startDownload(item, () => void refresh())
+          .then(async () => {
+            await refresh();
+            setDownloadNotice({ message: t('downloadFinished', { title: item.title }), loading: false });
+          })
+          .catch(() => void refresh())
+          .finally(() => setDownloadingIds((ids) => ids.filter((id) => id !== item.id)));
+        return;
       }
       router.push({ pathname: '/reader', params: { id: item.id } });
     } finally {
@@ -144,27 +148,34 @@ export default function LibraryScreen() {
   };
 
   const goUp = () => {
-    if (!location.sourceId) return;
-    if (!location.path) {
+    if (!activeLocation.sourceId) return;
+    if (!activeLocation.path) {
       setLocation(ROOT_LOCATION);
       return;
     }
-    const segments = location.path.split('/').filter(Boolean);
+    const segments = activeLocation.path.split('/').filter(Boolean);
     segments.pop();
-    setLocation({ sourceId: location.sourceId, path: segments.join('/') });
+    setLocation({ sourceId: activeLocation.sourceId, path: segments.join('/') });
   };
+
+  const emptyHint = mode === 'drive' ? t('emptyDriveLibraryHint') : mode === 'local' ? t('emptyLocalLibraryHint') : t('emptyLibraryHint');
+  const emptyActions = mode === 'drive'
+    ? <Button onPress={() => router.push('/drive')}>{t('connectDrive')}</Button>
+    : mode === 'local'
+      ? <Button loading={loading} onPress={() => void (canLinkFolder ? linkFolder() : importFiles())}>
+          {canLinkFolder ? t('linkFolder') : t('importFiles')}
+        </Button>
+      : <>
+          <Button disabled={loading} onPress={() => void changeLibraryMode('drive')}>{t('switchToDrive')}</Button>
+          <Button loading={loading} secondary onPress={() => void changeLibraryMode('local')}>{t('switchToLocal')}</Button>
+        </>;
 
   const emptyState = items.length === 0
     ? <LibraryEmpty
         icon={{ ios: 'books.vertical.fill', android: 'menu_book', web: 'menu_book' }}
         title={t('emptyLibrary')}
-        body={t('emptyLibraryHint')}
-        actions={<>
-          <Button onPress={() => router.push('/drive')}>{t('connectDrive')}</Button>
-          <Button secondary onPress={() => void (canLinkFolder ? linkFolder() : importFiles())}>
-            {canLinkFolder ? t('linkFolder') : t('importFiles')}
-          </Button>
-        </>}
+        body={emptyHint}
+        actions={emptyActions}
       />
     : searching
       ? <LibraryEmpty
@@ -183,7 +194,7 @@ export default function LibraryScreen() {
             body={t('noFilterResultsBody')}
             actions={<Button onPress={resetFilters}>{t('resetFilters')}</Button>}
           />
-        : location.sourceId
+        : activeLocation.sourceId
           ? <LibraryEmpty
               icon={{ ios: 'folder', android: 'folder', web: 'folder' }}
               title={t('emptyFolder')}
@@ -209,8 +220,6 @@ export default function LibraryScreen() {
           onPress={() => setFormat((current) => current === value ? 'all' : value)}
         />
       ))}
-      <Chip active={source === 'drive'} label={t('sourceDrive')} onPress={() => selectSource('drive')} />
-      <Chip active={source === 'local'} label={t('sourceLocal')} onPress={() => selectSource('local')} />
       <Chip
         active={advancedFilterCount > 0}
         icon={{ ios: 'line.3.horizontal.decrease', android: 'filter_list', web: 'filter_list' }}
@@ -243,9 +252,20 @@ export default function LibraryScreen() {
       </Pressable>
     </View> : null}
 
+    {mode === 'drive' && downloadNotice ? <View
+      accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
+      style={[styles.downloadBanner, { backgroundColor: colors.primaryContainer }]}>
+      {downloadNotice.loading ? <ActivityIndicator color={colors.onPrimaryContainer} /> : null}
+      <AppText style={{ color: colors.onPrimaryContainer, flex: 1 }}>{downloadNotice.message}</AppText>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('dismiss')} onPress={() => setDownloadNotice(null)} style={styles.iconButton}>
+        <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color={colors.onPrimaryContainer} size={18} />
+      </Pressable>
+    </View> : null}
+
     <View style={styles.contextRow}>
       <Breadcrumb
-        location={location}
+        location={activeLocation}
         sourceName={sourceAtLocation?.name}
         parts={breadcrumbParts}
         onNavigate={setLocation}
@@ -279,7 +299,7 @@ export default function LibraryScreen() {
             key={folder.key}
             width={folderWidth}
             name={folder.name}
-            sourceName={!location.sourceId ? folderSource?.name : undefined}
+            sourceName={!activeLocation.sourceId ? folderSource?.name : undefined}
             count={folder.itemCount}
             onPress={() => setLocation({ sourceId: folder.sourceId, path: folder.path })}
           />;
@@ -312,8 +332,8 @@ export default function LibraryScreen() {
         width={itemWidth}
         sourceName={sources.find((candidate) => candidate.id === item.sourceId)?.name}
         showPath={searching}
-        opening={openingId === item.id}
-        disabled={openingId !== null}
+        opening={openingId === item.id || downloadingIds.includes(item.id)}
+        disabled={openingId !== null || downloadingIds.includes(item.id)}
         onPress={() => void open(item).catch(() => undefined)}
       />}
     />
@@ -732,6 +752,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
+  downloadBanner: { minHeight: 60, borderRadius: 14, paddingLeft: 14, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   errorCopy: { flex: 1, paddingVertical: 10 },
   bannerAction: { minHeight: 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },

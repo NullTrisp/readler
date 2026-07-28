@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Google Drive · Readler</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: Canvas; color: CanvasText; }
+      main { width: min(22rem, calc(100% - 2rem)); text-align: center; }
+      button { min-height: 3rem; padding: .75rem 1.25rem; border: 0; border-radius: .75rem; background: #2e7d32; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+      button:disabled { opacity: .6; cursor: wait; }
+      p { line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Google Drive</h1>
+      <p id="status" role="status"></p>
+      <button id="continue" disabled></button>
+    </main>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const clientId = params.get('client_id');
+      const scope = params.get('scope');
+      const prompt = params.get('prompt') || '';
+      const nonce = params.get('nonce');
+      const status = document.getElementById('status');
+      const button = document.getElementById('continue');
+      button.textContent = params.get('continue') || 'Google Drive';
+      status.textContent = params.get('body') || '';
+
+      function finish(response) {
+        const channel = new BroadcastChannel(`readler-google-oauth:${nonce}`);
+        channel.postMessage({ type: 'readler-google-oauth', nonce, ...response });
+        channel.close();
+        window.close();
+        status.textContent = params.get('close') || '';
+      }
+
+      if (!clientId || !scope || !nonce) {
+        status.textContent = params.get('invalid') || 'Google Drive';
+      } else {
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.onload = () => { button.disabled = false; };
+        script.onerror = () => finish({ error: 'Google Identity Services could not be loaded.' });
+        document.head.appendChild(script);
+        button.addEventListener('click', () => {
+          button.disabled = true;
+          google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope,
+            callback: finish,
+          }).requestAccessToken({ prompt });
+        });
+      }
+    </script>
+  </body>
+</html>

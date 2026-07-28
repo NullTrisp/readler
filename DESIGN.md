@@ -4,7 +4,7 @@ Status: source of truth for the current product and future interface changes.
 
 ## Product definition
 
-Readler is a quiet, offline-first reading library for CBZ comics, EPUB books, and PDF documents. It brings together files stored on the device, in browser storage, or in one selected Google Drive folder, then keeps reading progress and bookmarks consistent across the user's devices.
+Readler is a quiet, offline-first reading library for CBZ comics, EPUB books, and PDF documents. It operates in one exclusive library mode at a time: files stored on the device or in browser storage, or one selected Google Drive folder. Drive mode keeps reading progress and bookmarks consistent across the user's devices.
 
 The product should feel private, dependable, and focused. The library helps the user find a title quickly; once reading starts, the interface gets out of the way.
 
@@ -36,10 +36,19 @@ Reader is a full-screen route above the main tabs.
 ### Navigation rules
 
 - The root route decides between onboarding and the main tabs only after the database and stored settings are ready.
-- The main tabs are **Library**, **Downloads**, and **Settings**, in that order.
+- The main tabs are **Library** and **Settings**. **Downloads** appears between them in Drive mode and while previewing the unconfigured app.
 - Opening a Drive item that is not local first materializes or downloads it, then opens the reader.
 - Back always returns to the previous context. Closing the reader must preserve the latest valid position.
 - Avoid adding top-level destinations when the task can live naturally inside an existing tab or modal.
+
+### Library modes
+
+- `Local` and `Google Drive` are mutually exclusive operating modes. Books, source controls, scanning, synchronization, background work, and direct routes are limited to the active mode.
+- Before a mode is selected, the user may explore an empty, unconfigured app. No source is active and no scan or synchronization runs in this state.
+- Adding the first local source selects Local mode. Choosing a Drive folder selects Google Drive mode. Cancelling either picker leaves the previous mode and onboarding state unchanged.
+- The mode can be changed from Settings. Switching suspends the previous library without deleting its sources, imported files, downloads, progress, or bookmarks; returning to that mode restores them.
+- Local mode may contain multiple linked folders and import collections. Drive mode contains one selected Drive folder, while its offline downloads remain Drive items rather than local sources.
+- Existing installations infer a mode when all sources belong to one family. Mixed existing libraries remain unconfigured until the user chooses a mode, without deleting either library.
 
 ## Core screens
 
@@ -50,20 +59,21 @@ Purpose: explain the value in one glance and get the first source connected.
 - Centered Readler mark, short promise, and three vertically stacked actions.
 - Primary action: Google Drive. Secondary action: local files or folder, adapted to platform. Tertiary action: enter an empty library.
 - Never require Google Drive; local-only use is a complete path.
+- Entering an empty library leaves the mode unconfigured so the interface can be explored before choosing.
 - A cancelled picker or sign-in returns to the screen without losing control or marking onboarding complete.
 
 ### Library
 
-Purpose: scan, filter, and open all known books.
+Purpose: scan, filter, and open books from the active library mode.
 
-- Search is first, followed by horizontally scrollable filter chips for format, source, reading status, and folder.
-- The default library view mirrors the source file hierarchy. Show direct child folders before direct child books, preserve the current folder while filters change, and expose a breadcrumb back to the library root. Search spans all known books, includes each result's relative path, and returns to the previous folder when the query is cleared.
+- Search is first, followed by horizontally scrollable filter chips for format, reading status, and folder. A source-mode filter is unnecessary because modes never mix.
+- The default library view mirrors the source file hierarchy. Show direct child folders before direct child books, preserve the current folder while filters change, and expose a breadcrumb back to the library root. Search spans all books in the active mode, includes each result's relative path, and returns to the previous folder when the query is cleared.
 - Folder cards show a recursive supported-book count. Empty physical folders do not need to appear because Readler indexes supported files rather than modifying or mirroring the user's filesystem.
 - Books appear in an adaptive cover grid. Each card shows cover or format placeholder, title, author or path, progress bar, and percentage.
 - Metadata filters may use normalized title, author, series, publisher, publication date, language, subjects, page count, filename, size, modification date, source, format, and reading status. Only facets with known values are shown.
 - Sorting supports at least title, author, series/issue, last modified, and reading progress. Folder navigation remains alphabetical and folders always precede books.
 - Pull to refresh synchronizes sources. Existing local content remains visible while refresh is in progress.
-- Empty state includes both Drive and local-source actions. A no-results state caused by filters should offer a clear way to reset filters rather than imply the library is empty.
+- The unconfigured empty state offers both mode choices. Local and Drive empty states expose only actions for their active mode. A no-results state caused by filters should offer a clear way to reset filters rather than imply the library is empty.
 - Cover art uses a portrait ratio of approximately `0.72`; placeholders use the same footprint to keep the grid stable.
 
 #### Library metadata and cover lifecycle
@@ -79,6 +89,7 @@ Purpose: scan, filter, and open all known books.
 
 Purpose: make Drive items available offline and manage their lifecycle.
 
+- This destination exists only in Drive mode (and as an empty preview before a mode is selected). Local books are already local and never appear as Drive downloads.
 - Each row shows format, title, state, progress when active, and the single most relevant action.
 - Supported states are queued, downloading, paused, ready, and error.
 - Ready items open directly and can be removed from offline storage without removing the source book or reading state.
@@ -86,9 +97,11 @@ Purpose: make Drive items available offline and manage their lifecycle.
 
 ### Settings
 
-Purpose: manage sources, synchronization, Google account access, and app information.
+Purpose: choose the library mode and manage its active sources, synchronization, account access, and app information.
 
-- List sources before add/sync controls; show source type and last successful scan when known.
+- Show the active mode and its switch action first. Switching modes explains that inactive data is preserved and requires confirmation once a mode has been selected.
+- List only active-mode sources before their add/sync controls; show source type and last successful scan when known.
+- Local controls never appear in Drive mode, and Google Drive controls never appear in Local mode.
 - Separate routine source actions from destructive Google Drive actions.
 - Confirm deletion of synchronized data and revocation of account access. Explain that deleting a source or download does not delete the original book.
 - App version and supported formats form a quiet footer, not a primary card.

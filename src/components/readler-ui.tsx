@@ -70,18 +70,19 @@ export function AppText({ children, muted, title, style, ...props }: TextProps &
   return <Text {...props} style={[styles.text, { color: muted ? colors.onSurfaceVariant : colors.onSurface }, title && styles.title, style]}>{children}</Text>;
 }
 
-export function Button({ children, onPress, secondary, danger, disabled, icon }: PropsWithChildren<{
-  onPress(): void; secondary?: boolean; danger?: boolean; disabled?: boolean; icon?: ReactNode;
+export function Button({ children, onPress, secondary, danger, disabled, loading, icon }: PropsWithChildren<{
+  onPress(): void; secondary?: boolean; danger?: boolean; disabled?: boolean; loading?: boolean; icon?: ReactNode;
 }>) {
   const colors = useReadlerTheme();
-  const backgroundColor = disabled ? colors.disabledContainer : danger ? colors.danger : secondary ? colors.primaryContainer : colors.primary;
+  const inactive = disabled || loading;
+  const backgroundColor = inactive ? colors.disabledContainer : danger ? colors.danger : secondary ? colors.primaryContainer : colors.primary;
   const pressedBackgroundColor = danger ? colors.dangerPressed : secondary ? colors.primaryContainer : colors.primaryPressed;
-  const textColor = disabled ? colors.onDisabled : danger ? colors.onDanger : secondary ? colors.onPrimaryContainer : colors.onPrimary;
-  return <Pressable accessibilityRole="button" accessibilityState={{ disabled: Boolean(disabled) }} disabled={disabled} onPress={onPress} style={({ pressed }) => [
+  const textColor = inactive ? colors.onDisabled : danger ? colors.onDanger : secondary ? colors.onPrimaryContainer : colors.onPrimary;
+  return <Pressable accessibilityRole="button" accessibilityState={{ busy: Boolean(loading), disabled: Boolean(inactive) }} disabled={inactive} onPress={onPress} style={({ pressed }) => [
     styles.button,
     { backgroundColor },
-    pressed && !disabled && { backgroundColor: pressedBackgroundColor, transform: [{ scale: 0.995 }] },
-  ]}>{icon}<Text style={[styles.buttonText, { color: textColor }]}>{children}</Text></Pressable>;
+    pressed && !inactive && { backgroundColor: pressedBackgroundColor, transform: [{ scale: 0.995 }] },
+  ]}>{loading ? <ActivityIndicator color={textColor} /> : icon}<Text style={[styles.buttonText, { color: textColor }]}>{children}</Text></Pressable>;
 }
 
 export function Loading() {

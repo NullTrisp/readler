@@ -4,7 +4,6 @@ export interface VisibleLibraryFilter {
   query: string;
   format: ContentFormat | 'all';
   status: ReadingStatus | 'all';
-  source: 'all' | 'drive' | 'local';
   folder: string | 'all';
   author?: string | 'all';
   series?: string | 'all';
@@ -42,8 +41,6 @@ const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'bas
 export function matchesLibraryItem(item: LibraryItem, filter: VisibleLibraryFilter) {
   if (filter.format !== 'all' && item.format !== filter.format) return false;
   if (filter.status !== 'all' && item.status !== filter.status) return false;
-  if (filter.source === 'drive' && item.sourceKind !== 'drive') return false;
-  if (filter.source === 'local' && item.sourceKind === 'drive') return false;
   if (filter.folder !== 'all' && !isItemInsideFolder(item, filter.folder)) return false;
   if (filter.author && filter.author !== 'all' && !sameText(item.author, filter.author)) return false;
   if (filter.series && filter.series !== 'all' && !sameText(item.series, filter.series)) return false;

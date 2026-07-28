@@ -3,10 +3,12 @@ import { SymbolView } from 'expo-symbols';
 import { useTranslation } from 'react-i18next';
 
 import { useReadlerTheme } from '@/components/readler-ui';
+import { useApp } from '@/state/app-provider';
 
 export default function TabsLayout() {
   const { t } = useTranslation();
   const colors = useReadlerTheme();
+  const { mode } = useApp();
   return (
     <Tabs screenOptions={{
       tabBarActiveTintColor: colors.primary,
@@ -24,6 +26,7 @@ export default function TabsLayout() {
         />,
       }} />
       <Tabs.Screen name="downloads" options={{
+        href: mode === 'local' ? null : undefined,
         title: t('downloads'),
         tabBarIcon: ({ color, size }) => <SymbolView
           name={{ ios: 'arrow.down.to.line', android: 'download', web: 'download' }}

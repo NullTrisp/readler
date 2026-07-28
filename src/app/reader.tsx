@@ -2,13 +2,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { AppText, Loading, palette } from '@/components/readler-ui';
 import { getLibraryItem, getProgress, getSetting, listBookmarks, saveProgress, setSetting, toggleBookmark, updateItemMetadata } from '@/data/repository';
-import type { BookMetadata, LibraryItem, ReadingLocator } from '@/domain/models';
+import { sourceMatchesLibraryMode, type BookMetadata, type LibraryItem, type ReadingLocator } from '@/domain/models';
 import { CbzReader } from '@/readers/cbz-reader';
 import { EpubReader } from '@/readers/epub-reader';
 import { PdfReader } from '@/readers/pdf-reader';
@@ -21,7 +21,7 @@ import { goBackOrReplaceRoot } from '@/utils/navigation';
 export default function ReaderScreen() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { sources, refresh } = useApp();
+  const { mode, ready, sources, refresh } = useApp();
   const reader = useRef<ReaderHandle>(null);
   const [item, setItem] = useState<LibraryItem | null>(null);
   const [uri, setUri] = useState<string | null>(null);
@@ -37,11 +37,25 @@ export default function ReaderScreen() {
   const trackWidth = useRef(1);
 
   useEffect(() => {
-    if (!id) return;
+    if (Platform.OS !== 'web') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.key === 'ArrowLeft') reader.current?.previous();
+      else if (event.key === 'ArrowRight') reader.current?.next();
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!id || !ready) return;
     void (async () => {
       try {
+        setError(null);
         const loaded = await getLibraryItem(id);
-        if (!loaded) throw new Error('The library item no longer exists.');
+        if (!loaded || !sourceMatchesLibraryMode(loaded.sourceKind, mode)) throw new Error(t('inactiveLibraryItem'));
         const progress = await getProgress(id);
         setItem(loaded);
         setLocator(progress?.locator ?? null);
@@ -53,7 +67,7 @@ export default function ReaderScreen() {
         setUri(await materializeLocalItem(loaded));
       } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
     })();
-  }, [id]);
+  }, [id, mode, ready, t]);
 
   const persist = useCallback(async () => {
     if (!item || !latest.current.locator) return;

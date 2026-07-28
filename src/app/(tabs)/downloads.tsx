@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -9,7 +9,8 @@ import { useApp } from '@/state/app-provider';
 export default function DownloadsScreen() {
   const { t } = useTranslation();
   const colors = useReadlerTheme();
-  const { items, refresh } = useApp();
+  const { items, mode, refresh } = useApp();
+  if (mode === 'local') return <Redirect href="/(tabs)" />;
   const downloads = items.filter((item) => item.sourceKind === 'drive' && item.downloadStatus !== 'none');
   return <Screen><FlatList data={downloads} keyExtractor={(item) => item.id} contentContainerStyle={downloads.length ? styles.list : { flexGrow: 1 }}
     ListEmptyComponent={<EmptyState title={t('downloads')} body={t('noDownloads')} />}

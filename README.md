@@ -1,6 +1,6 @@
 # Readler
 
-Readler is an offline-first reader for Android, iOS, and the web. It opens CBZ, EPUB, and PDF libraries stored on the device, in browser storage, or in a selected Google Drive folder. Reading progress and bookmarks for Drive files synchronize privately through the Google Drive `appDataFolder`.
+Readler is an offline-first reader for Android, iOS, and the web. It opens CBZ, EPUB, and PDF libraries in one exclusive mode at a time: local files or a selected Google Drive folder. Switching modes keeps the inactive library intact, and reading progress and bookmarks for Drive files synchronize privately through the Google Drive `appDataFolder`.
 
 ## Requirements
 
@@ -50,3 +50,9 @@ npm run doctor
 Drive content is read-only. Readler never uploads, edits, or deletes books. It only writes `state-<installationId>.json` snapshots to the hidden application-data space and can delete those snapshots from Settings.
 
 See [Google Drive setup](docs/GOOGLE_DRIVE_SETUP.md) and the [privacy checklist](docs/PRIVACY.md) before publishing.
+
+
+## TODO
+[] Real notifications for downloads
+[] Fix Android OAuth flow
+[] Test in IOS env

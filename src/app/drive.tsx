@@ -1,3 +1,4 @@
+import { Redirect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -11,10 +12,10 @@ type Crumb = DriveFolder;
 export default function DriveScreen() {
   const { t } = useTranslation();
   const colors = useReadlerTheme();
-  const { connectDrive } = useApp();
+  const { connectDrive, loading: importing, mode, ready } = useApp();
   const [user, setUser] = useState<DriveUser | null>(null);
   const [folders, setFolders] = useState<DriveFolder[]>([]);
-  const [crumbs, setCrumbs] = useState<Crumb[]>([{ id: 'root', name: 'My Drive' }]);
+  const [crumbs, setCrumbs] = useState<Crumb[]>([{ id: 'root', name: t('myDrive') }]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const current = crumbs[crumbs.length - 1];
@@ -47,20 +48,22 @@ export default function DriveScreen() {
     await loadFolders(parent.id);
   };
 
+  if (!ready) return <Loading />;
+  if (mode === 'local') return <Redirect href="/(tabs)/settings" />;
   if (!isGoogleConfigured()) return <Screen><EmptyState title={t('googleDrive')} body={t('googleNotConfigured')} /></Screen>;
-  if (!user) return <Screen><EmptyState title={t('googleDrive')} body={error ?? t('emptyLibraryHint')} action={<Button onPress={() => void signIn()}>{t('connectDrive')}</Button>} /></Screen>;
+  if (!user) return <Screen><EmptyState title={t('googleDrive')} body={error ?? t('googleOauthBody')} action={<Button loading={loading} onPress={() => void signIn()}>{t('connectDrive')}</Button>} /></Screen>;
 
   return <Screen>
     <View style={styles.header}>
       <AppText title>{current.name}</AppText>
       <AppText muted>{user.user.email}</AppText>
-      {current.id !== 'root' && <Button onPress={() => void connectDrive(current, user.user.id)}>{t('chooseFolder')}</Button>}
-      {crumbs.length > 1 && <Pressable onPress={() => void goBack()}><AppText style={{ color: colors.primary, fontWeight: '700' }}>‹ {t('back')}</AppText></Pressable>}
+      {current.id !== 'root' && <Button loading={importing} onPress={() => void connectDrive(current, user.user.id)}>{t('chooseFolder')}</Button>}
+      {crumbs.length > 1 && <Pressable accessibilityRole="button" accessibilityLabel={t('back')} onPress={() => void goBack()}><AppText style={{ color: colors.primary, fontWeight: '700' }}>‹ {t('back')}</AppText></Pressable>}
       {error && <AppText style={{ color: colors.danger }}>{error}</AppText>}
     </View>
     {loading ? <Loading /> : <FlatList data={folders} keyExtractor={(item) => item.id} contentContainerStyle={styles.list}
-      ListEmptyComponent={<EmptyState title={current.name} body="No folders" />}
-      renderItem={({ item }) => <Pressable onPress={() => void openFolder(item)}><Card style={styles.folder}><AppText style={[styles.folderIcon, { color: colors.primary }]}>▰</AppText><AppText>{item.name}</AppText><AppText muted>›</AppText></Card></Pressable>} />}
+      ListEmptyComponent={<EmptyState title={current.name} body={t('noFolders')} />}
+      renderItem={({ item }) => <Pressable accessibilityRole="button" accessibilityLabel={t('openFolderNamed', { name: item.name })} onPress={() => void openFolder(item)}><Card style={styles.folder}><AppText style={[styles.folderIcon, { color: colors.primary }]}>▰</AppText><AppText>{item.name}</AppText><AppText muted>›</AppText></Card></Pressable>} />}
   </Screen>;
 }
 

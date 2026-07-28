@@ -1,3 +1,5 @@
+import i18n from '@/i18n';
+
 export const DRIVE_SCOPES = [
   'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/drive.appdata',
@@ -9,6 +11,7 @@ export interface DriveUser {
 
 type TokenResponse = { access_token?: string; expires_in?: number; error?: string };
 type TokenClient = { requestAccessToken(options?: { prompt?: string }): void };
+type OAuthBridgeResponse = TokenResponse & { type: 'readler-google-oauth'; nonce: string };
 
 declare global {
   interface Window {
@@ -25,8 +28,7 @@ declare global {
 
 let accessToken: string | null = null;
 let expiresAt = 0;
-let tokenClient: TokenClient | null = null;
-let pendingToken: { resolve(token: string): void; reject(error: Error): void } | null = null;
+let pendingToken: Promise<string> | null = null;
 
 export function isGoogleConfigured() {
   return Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
@@ -54,29 +56,54 @@ async function loadGoogleIdentity() {
 async function requestToken(prompt: '' | 'consent' = '') {
   const clientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
   if (!clientId) throw new Error('Google OAuth is not configured for web.');
-  await loadGoogleIdentity();
-  if (!tokenClient) {
-    tokenClient = window.google!.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: [...DRIVE_SCOPES, 'openid', 'email', 'profile'].join(' '),
-      callback(response) {
-        const pending = pendingToken;
-        pendingToken = null;
-        if (!pending) return;
-        if (!response.access_token || response.error) {
-          pending.reject(new Error(response.error ?? 'Google did not return an access token.'));
-          return;
-        }
-        accessToken = response.access_token;
-        expiresAt = Date.now() + Math.max(30, (response.expires_in ?? 3600) - 60) * 1000;
-        pending.resolve(accessToken);
-      },
-    });
-  }
-  return new Promise<string>((resolve, reject) => {
-    pendingToken = { resolve, reject };
-    tokenClient!.requestAccessToken({ prompt });
+  if (pendingToken) return pendingToken;
+
+  const nonce = crypto.randomUUID();
+  const channel = new BroadcastChannel(`readler-google-oauth:${nonce}`);
+  const url = new URL('/google-oauth.html', window.location.origin);
+  url.search = new URLSearchParams({
+    client_id: clientId,
+    scope: [...DRIVE_SCOPES, 'openid', 'email', 'profile'].join(' '),
+    prompt,
+    nonce,
+    body: i18n.t('googleOauthBody'),
+    continue: i18n.t('googleOauthContinue'),
+    invalid: i18n.t('googleOauthInvalid'),
+    close: i18n.t('googleOauthClose'),
+  }).toString();
+
+  pendingToken = new Promise<string>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error('Google OAuth timed out.')), 120_000);
+    channel.onmessage = ({ data }) => {
+      if (!isOAuthBridgeResponse(data, nonce)) return;
+      window.clearTimeout(timeout);
+      if (!data.access_token || data.error) {
+        reject(new Error(data.error ?? 'Google did not return an access token.'));
+        return;
+      }
+      accessToken = data.access_token;
+      expiresAt = Date.now() + Math.max(30, (data.expires_in ?? 3600) - 60) * 1000;
+      resolve(accessToken);
+    };
+    if (!window.open(url, 'readler-google-oauth', 'popup,width=520,height=680')) {
+      window.clearTimeout(timeout);
+      reject(new Error('Google OAuth popup was blocked.'));
+    }
+  }).finally(() => {
+    channel.close();
+    pendingToken = null;
   });
+  return pendingToken;
+}
+
+export function isOAuthBridgeResponse(value: unknown, nonce: string): value is OAuthBridgeResponse {
+  if (!value || typeof value !== 'object') return false;
+  const response = value as Record<string, unknown>;
+  const expiresIn = response.expires_in;
+  return response.type === 'readler-google-oauth'
+    && response.nonce === nonce
+    && (typeof response.access_token === 'string' || typeof response.error === 'string')
+    && (expiresIn === undefined || (typeof expiresIn === 'number' && Number.isFinite(expiresIn) && expiresIn > 0));
 }
 
 export async function signInToDrive(): Promise<DriveUser | null> {
@@ -97,7 +124,8 @@ export async function signOutDrive(revoke = false) {
   const token = accessToken;
   accessToken = null;
   expiresAt = 0;
-  if (revoke && token && window.google?.accounts.oauth2) {
+  if (revoke && token) {
+    await loadGoogleIdentity();
     await new Promise<void>((resolve) => window.google!.accounts.oauth2.revoke(token, resolve));
   }
 }
