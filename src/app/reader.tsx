@@ -15,6 +15,7 @@ import type { ReaderHandle } from '@/readers/types';
 import { materializeLocalItem } from '@/services/local-source';
 import { syncReadingState } from '@/services/sync';
 import { useApp } from '@/state/app-provider';
+import { goBackOrReplaceRoot } from '@/utils/navigation';
 
 export default function ReaderScreen() {
   const { t } = useTranslation();
@@ -97,8 +98,9 @@ export default function ReaderScreen() {
     if (!item) return;
     void updateItemMetadata(item.id, metadata).then(() => refresh());
   }, [item, refresh]);
+  const leaveReader = () => goBackOrReplaceRoot(router);
 
-  if (error || (item && !uri)) return <View style={styles.error}><AppText title>{t('readerUnavailable')}</AppText><AppText muted>{error}</AppText><Pressable onPress={() => router.back()} style={styles.control}><AppText style={styles.controlText}>{t('back')}</AppText></Pressable></View>;
+  if (error || (item && !uri)) return <View style={styles.error}><AppText title>{t('readerUnavailable')}</AppText><AppText muted>{error}</AppText><Pressable onPress={leaveReader} style={styles.control}><AppText style={styles.controlText}>{t('back')}</AppText></Pressable></View>;
   if (!item || !uri) return <Loading />;
 
   const common = {
@@ -111,7 +113,7 @@ export default function ReaderScreen() {
   return <View style={styles.container}><StatusBar hidden={!controls} style="light" />
     {item.format === 'cbz' ? <CbzReader ref={reader} {...common} itemId={item.id} rtl={rtl} /> : item.format === 'epub' ? <EpubReader ref={reader} {...common} /> : <PdfReader ref={reader} {...common} />}
     {controls && <SafeAreaView pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-      <View style={styles.top}><Pressable onPress={() => router.back()} style={styles.circle}><AppText style={styles.controlText}>‹</AppText></Pressable><AppText style={styles.readerTitle} numberOfLines={1}>{item.title}</AppText><Pressable onPress={() => void bookmark()} style={styles.circle}><AppText style={styles.controlText}>{bookmarked ? '◆' : '◇'}</AppText></Pressable></View>
+      <View style={styles.top}><Pressable onPress={leaveReader} style={styles.circle}><AppText style={styles.controlText}>‹</AppText></Pressable><AppText style={styles.readerTitle} numberOfLines={1}>{item.title}</AppText><Pressable onPress={() => void bookmark()} style={styles.circle}><AppText style={styles.controlText}>{bookmarked ? '◆' : '◇'}</AppText></Pressable></View>
       <View style={styles.bottom}><Pressable accessibilityRole="adjustable" accessibilityLabel={t('positionSlider')}
         onLayout={(event) => { trackWidth.current = event.nativeEvent.layout.width; }}
         onPress={(event) => reader.current?.seek(Math.max(0, Math.min(1, event.nativeEvent.locationX / trackWidth.current)))}
