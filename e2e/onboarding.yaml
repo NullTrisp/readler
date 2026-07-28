@@ -1,0 +1,7 @@
+appId: com.nicolas.readler
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Readler"
+- assertVisible: "Google Drive"
+- assertVisible: "local"

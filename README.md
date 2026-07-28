@@ -1,56 +1,52 @@
-# Welcome to your Expo app 👋
+# Readler
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Readler is an offline-first reader for Android, iOS, and the web. It opens CBZ, EPUB, and PDF libraries stored on the device, in browser storage, or in a selected Google Drive folder. Reading progress and bookmarks for Drive files synchronize privately through the Google Drive `appDataFolder`.
 
-## Get started
+## Requirements
 
-1. Install dependencies
+- Node.js 22 or newer
+- Expo SDK 57
+- Android API 24+ and iOS 16.4+ (the native minimums required by Expo SDK 57 / React Native 0.86)
+- An Expo development build for Android/iOS; Expo Go cannot load the PDF, ZIP, or Google Sign-In native modules
+- A browser with IndexedDB, Web Workers, and WebAssembly for web reading
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Local development
 
 ```bash
-npm run reset-project
+npm install
+npx expo prebuild --clean
+npx expo run:android
+# or: npx expo run:ios
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Web development and production export:
 
-### Other setup steps
+```bash
+npm run web
+npm run web:export
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+The production files are written to `dist`. The hosting service must return the `Cross-Origin-Embedder-Policy: credentialless` and `Cross-Origin-Opener-Policy: same-origin` headers included in `public/_headers`; these are required by SQLite WASM.
 
-## Learn more
+Copy `.env.example` to `.env.local` and add the OAuth client IDs before testing Google Drive. Local files work without Google configuration.
 
-To learn more about developing your project with Expo, look at the following resources:
+Quality checks:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run doctor
+```
 
-## Join the community
+## Architecture
 
-Join our community of developers creating universal apps.
+- `src/domain`: format-independent library, locator, bookmark, download, and sync contracts.
+- `src/data`: versioned SQLite schema and repository functions.
+- `src/services`: native and web local/Drive sources, persistent downloads, and per-device Drive synchronization.
+- `src/readers`: native and web adapters for CBZ, EPUB, and PDF behind one reader interface.
+- `src/app`: Expo Router onboarding, tabs, Drive browser, and full-screen reader.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Drive content is read-only. Readler never uploads, edits, or deletes books. It only writes `state-<installationId>.json` snapshots to the hidden application-data space and can delete those snapshots from Settings.
+
+See [Google Drive setup](docs/GOOGLE_DRIVE_SETUP.md) and the [privacy checklist](docs/PRIVACY.md) before publishing.
