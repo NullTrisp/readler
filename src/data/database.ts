@@ -16,10 +16,11 @@ export async function getDatabase() {
 
 export async function migrate(database: SQLite.SQLiteDatabase) {
   const result = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  if ((result?.user_version ?? 0) >= 1) return;
+  let version = result?.user_version ?? 0;
 
-  await database.withTransactionAsync(async () => {
-    await database.execAsync(`
+  if (version < 1) {
+    await database.withTransactionAsync(async () => {
+      await database.execAsync(`
       CREATE TABLE IF NOT EXISTS sources (
         id TEXT PRIMARY KEY NOT NULL,
         kind TEXT NOT NULL,
@@ -83,5 +84,37 @@ export async function migrate(database: SQLite.SQLiteDatabase) {
       CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
       PRAGMA user_version = 1;
     `);
-  });
+    });
+    version = 1;
+  }
+
+  if (version < 2) {
+    await database.withTransactionAsync(async () => {
+      await database.execAsync(`
+        ALTER TABLE library_items ADD COLUMN series TEXT;
+        ALTER TABLE library_items ADD COLUMN series_number TEXT;
+        ALTER TABLE library_items ADD COLUMN publisher TEXT;
+        ALTER TABLE library_items ADD COLUMN published_at TEXT;
+        ALTER TABLE library_items ADD COLUMN language TEXT;
+        ALTER TABLE library_items ADD COLUMN subjects_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE library_items ADD COLUMN page_count INTEGER;
+        ALTER TABLE library_items ADD COLUMN metadata_extracted INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX IF NOT EXISTS library_items_author_idx ON library_items(author COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS library_items_series_idx ON library_items(series COLLATE NOCASE);
+        PRAGMA user_version = 2;
+      `);
+    });
+    version = 2;
+  }
+
+  if (version < 3) {
+    await database.withTransactionAsync(async () => {
+      await database.execAsync(`
+        ALTER TABLE library_items ADD COLUMN cover_extraction_version INTEGER NOT NULL DEFAULT 0;
+        UPDATE library_items SET cover_uri = NULL
+          WHERE cover_uri LIKE 'blob:%' OR cover_uri LIKE '%/cache/%';
+        PRAGMA user_version = 3;
+      `);
+    });
+  }
 }

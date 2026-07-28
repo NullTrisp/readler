@@ -25,9 +25,8 @@ export const EpubReader = forwardRef<ReaderHandle, ReaderProps>(function EpubRea
       await loadedBook.ready;
       await loadedBook.locations.generate(1500);
       const metadata = await loadedBook.loaded.metadata;
-      const coverUri = await loadedBook.coverUrl();
       if (!mounted) return;
-      onMetadata?.({ title: metadata.title, author: metadata.creator, coverUri });
+      onMetadata?.({ title: metadata.title, author: metadata.creator });
       const loadedRendition = loadedBook.renderTo(host.current, { width: '100%', height: '100%', spread: 'none', flow: 'paginated' });
       rendition.current = loadedRendition;
       loadedRendition.on('relocated', (location: Location) => {

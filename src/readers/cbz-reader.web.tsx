@@ -45,7 +45,7 @@ export const CbzReader = forwardRef<ReaderHandle, CbzProps>(function CbzReader(
       const metadata = comicInfo ? parseComicInfo(await comicInfo.async('text')) : {};
       if (!mounted) return;
       setNaturalPages(urls);
-      onMetadata?.({ ...metadata, coverUri: urls[0] ?? null });
+      onMetadata?.({ ...metadata, pageCount: urls.length || null });
     })().catch((caught) => mounted && setError(caught instanceof Error ? caught.message : String(caught)));
     return () => {
       mounted = false;

@@ -6,7 +6,7 @@ import { pageFromProgress } from '@/utils/locators';
 import type { ReaderHandle, ReaderProps } from './types';
 
 export const PdfReader = forwardRef<ReaderHandle, ReaderProps>(function PdfReader(
-  { uri, initialLocator, onLocation, onToggleControls },
+  { uri, initialLocator, onLocation, onToggleControls, onMetadata },
   ref,
 ) {
   const { width, height } = useWindowDimensions();
@@ -36,6 +36,7 @@ export const PdfReader = forwardRef<ReaderHandle, ReaderProps>(function PdfReade
       document.current = loaded;
       setPages(loaded.numPages);
       setPage((value) => Math.min(value, loaded.numPages));
+      onMetadata?.({ pageCount: loaded.numPages });
       setLoading(false);
     })().catch((caught) => mounted && setError(caught instanceof Error ? caught.message : String(caught)));
     return () => {
@@ -44,7 +45,7 @@ export const PdfReader = forwardRef<ReaderHandle, ReaderProps>(function PdfReade
       void document.current?.loadingTask.destroy();
       document.current = null;
     };
-  }, [uri]);
+  }, [onMetadata, uri]);
 
   useEffect(() => {
     const pdf = document.current;

@@ -20,7 +20,7 @@ export const PdfReader = forwardRef<ReaderHandle, ReaderProps>(function PdfReade
   return <View style={styles.container} onTouchEnd={onToggleControls}>
     <Pdf ref={pdf} source={{ uri }} page={current.current} trustAllCerts={false} style={styles.pdf}
       enableDoubleTapZoom horizontal={false} spacing={8}
-      onLoadComplete={(pages) => { total.current = pages; onMetadata?.({}); }}
+      onLoadComplete={(pages) => { total.current = pages; onMetadata?.({ pageCount: pages }); }}
       onPageChanged={(page, pages) => { current.current = page; total.current = pages; onLocation({ kind: 'page', index: page, total: pages }, page / pages); }} />
   </View>;
 });

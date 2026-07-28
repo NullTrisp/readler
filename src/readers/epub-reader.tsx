@@ -25,7 +25,7 @@ export const EpubReader = forwardRef<ReaderHandle, ReaderProps>(function EpubRea
       initialLocation={initialLocator?.kind === 'epubCfi' ? initialLocator.cfi : undefined}
       onReady={() => {
         const meta = getMeta();
-        onMetadata?.({ title: meta.title, author: meta.author, coverUri: typeof meta.cover === 'string' ? meta.cover : null });
+        onMetadata?.({ title: meta.title, author: meta.author });
       }}
       onSingleTap={onToggleControls}
       renderLoadingFileComponent={() => <View style={styles.loading}><ActivityIndicator color="#2E7D32" /></View>}

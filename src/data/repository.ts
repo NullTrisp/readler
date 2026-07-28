@@ -1,6 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 
 import type {
+  BookMetadata,
   Bookmark,
   ContentSourceRecord,
   DownloadRecord,
@@ -22,6 +23,15 @@ type LibraryRow = {
   name: string;
   title: string;
   author: string | null;
+  series: string | null;
+  series_number: string | null;
+  publisher: string | null;
+  published_at: string | null;
+  language: string | null;
+  subjects_json: string;
+  page_count: number | null;
+  metadata_extracted: number;
+  cover_extraction_version: number;
   relative_path: string;
   mime_type: string | null;
   size: number | null;
@@ -31,6 +41,7 @@ type LibraryRow = {
   available: number;
   updated_at: string;
   download_status: LibraryItem['downloadStatus'] | null;
+  download_local_uri: string | null;
   download_progress: number | null;
   reading_status: LibraryItem['status'] | null;
   reading_percent: number | null;
@@ -100,19 +111,60 @@ export async function replaceSourceItems(source: ContentSourceRecord, items: Sca
     await saveSource({ ...source, lastScanAt: scannedAt });
     await database.runAsync('UPDATE library_items SET available = 0 WHERE source_id = ?', source.id);
     for (const item of items) {
-      const existing = await database.getFirstAsync<{ id: string; local_uri: string | null }>(
-        'SELECT id, local_uri FROM library_items WHERE source_id = ? AND provider_key = ?',
+      const existing = await database.getFirstAsync<Pick<LibraryRow,
+        'id' | 'title' | 'author' | 'series' | 'series_number' | 'publisher' | 'published_at' |
+        'language' | 'subjects_json' | 'page_count' | 'metadata_extracted' | 'cover_extraction_version' | 'size' | 'modified_at' |
+        'cover_uri' | 'local_uri'
+      >>(
+        `SELECT id, title, author, series, series_number, publisher, published_at, language,
+          subjects_json, page_count, metadata_extracted, cover_extraction_version, size, modified_at,
+          cover_uri, local_uri
+         FROM library_items WHERE source_id = ? AND provider_key = ?`,
         source.id,
         item.providerKey,
       );
+      const size = item.size ?? null;
+      const modifiedAt = item.modifiedAt ?? null;
+      const contentUnchanged = Boolean(existing) && existing?.size === size && existing.modified_at === modifiedAt;
+      const incomingMetadata = item.metadataExtracted === true;
+      const preserveMetadata = contentUnchanged && Boolean(existing?.metadata_extracted) && !incomingMetadata;
+      const incomingCoverVersion = Math.max(0, Math.floor(item.coverExtractionVersion ?? 0));
+      const existingCoverVersion = existing?.cover_extraction_version ?? 0;
+      const preserveExtractedCover = contentUnchanged && existingCoverVersion > incomingCoverVersion;
+      const title = preserveMetadata
+        ? existing!.title
+        : item.title?.trim() || item.name.replace(/\.[^.]+$/, '');
+      const author = preserveMetadata ? existing!.author : item.author ?? null;
+      const series = preserveMetadata ? existing!.series : item.series ?? null;
+      const seriesNumber = preserveMetadata ? existing!.series_number : item.seriesNumber ?? null;
+      const publisher = preserveMetadata ? existing!.publisher : item.publisher ?? null;
+      const publishedAt = preserveMetadata ? existing!.published_at : item.publishedAt ?? null;
+      const language = preserveMetadata ? existing!.language : item.language ?? null;
+      const subjectsJson = preserveMetadata ? existing!.subjects_json : serializeSubjects(item.subjects);
+      const pageCount = preserveMetadata ? existing!.page_count : item.pageCount ?? null;
+      const metadataExtracted = incomingMetadata || preserveMetadata;
+      const coverExtractionVersion = preserveExtractedCover ? existingCoverVersion : incomingCoverVersion;
+      const coverUri = preserveExtractedCover
+        ? existing?.cover_uri ?? null
+        : contentUnchanged
+          ? item.coverUri ?? existing?.cover_uri ?? null
+          : item.coverUri ?? null;
       await database.runAsync(
         `INSERT INTO library_items(id, source_id, provider_key, format, name, title, author,
-          relative_path, mime_type, size, modified_at, cover_uri, local_uri, available, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+          series, series_number, publisher, published_at, language, subjects_json, page_count,
+          metadata_extracted, cover_extraction_version, relative_path, mime_type, size, modified_at,
+          cover_uri, local_uri, available, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
          ON CONFLICT(source_id, provider_key) DO UPDATE SET format=excluded.format, name=excluded.name,
-          title=excluded.title, author=excluded.author, relative_path=excluded.relative_path,
+          title=excluded.title, author=excluded.author, series=excluded.series,
+          series_number=excluded.series_number, publisher=excluded.publisher,
+          published_at=excluded.published_at, language=excluded.language,
+          subjects_json=excluded.subjects_json, page_count=excluded.page_count,
+          metadata_extracted=excluded.metadata_extracted,
+          cover_extraction_version=excluded.cover_extraction_version,
+          relative_path=excluded.relative_path,
           mime_type=excluded.mime_type, size=excluded.size, modified_at=excluded.modified_at,
-          cover_uri=COALESCE(excluded.cover_uri, library_items.cover_uri),
+          cover_uri=excluded.cover_uri,
           local_uri=COALESCE(excluded.local_uri, library_items.local_uri), available=1,
           updated_at=excluded.updated_at`,
         existing?.id ?? randomUUID(),
@@ -120,13 +172,22 @@ export async function replaceSourceItems(source: ContentSourceRecord, items: Sca
         item.providerKey,
         item.format,
         item.name,
-        item.title ?? item.name.replace(/\.[^.]+$/, ''),
-        item.author ?? null,
+        title,
+        author,
+        series,
+        seriesNumber,
+        publisher,
+        publishedAt,
+        language,
+        subjectsJson,
+        pageCount,
+        metadataExtracted ? 1 : 0,
+        coverExtractionVersion,
         item.relativePath,
         item.mimeType ?? null,
-        item.size ?? null,
-        item.modifiedAt ?? null,
-        item.coverUri ?? null,
+        size,
+        modifiedAt,
+        coverUri,
         item.localUri ?? existing?.local_uri ?? null,
         scannedAt,
       );
@@ -144,12 +205,21 @@ function mapLibraryRow(row: LibraryRow): LibraryItem {
     name: row.name,
     title: row.title,
     author: row.author,
+    series: row.series,
+    seriesNumber: row.series_number,
+    publisher: row.publisher,
+    publishedAt: row.published_at,
+    language: row.language,
+    subjects: parseSubjects(row.subjects_json),
+    pageCount: row.page_count,
+    metadataExtracted: Boolean(row.metadata_extracted),
+    coverExtractionVersion: row.cover_extraction_version ?? 0,
     relativePath: row.relative_path,
     mimeType: row.mime_type,
     size: row.size,
     modifiedAt: row.modified_at,
     coverUri: row.cover_uri,
-    localUri: row.local_uri,
+    localUri: row.download_local_uri ?? row.local_uri,
     available: Boolean(row.available),
     downloadStatus: row.download_status ?? (row.source_kind === 'drive' ? 'none' : 'ready'),
     downloadProgress: row.download_progress ?? 0,
@@ -161,6 +231,7 @@ function mapLibraryRow(row: LibraryRow): LibraryItem {
 
 const LIBRARY_SELECT = `SELECT i.*, s.kind AS source_kind,
   d.status AS download_status,
+  d.local_uri AS download_local_uri,
   CASE WHEN d.total_bytes > 0 THEN CAST(d.bytes_written AS REAL) / d.total_bytes ELSE 0 END AS download_progress,
   p.status AS reading_status, p.percent AS reading_percent
   FROM library_items i JOIN sources s ON s.id=i.source_id
@@ -171,9 +242,11 @@ export async function listLibrary(filter: LibraryFilter = {}) {
   const where = ['i.available = 1'];
   const args: string[] = [];
   if (filter.query) {
-    where.push('(i.title LIKE ? OR i.author LIKE ? OR i.relative_path LIKE ?)');
+    where.push(`(i.title LIKE ? OR i.author LIKE ? OR i.series LIKE ? OR i.series_number LIKE ?
+      OR i.publisher LIKE ? OR i.published_at LIKE ? OR i.language LIKE ? OR i.subjects_json LIKE ?
+      OR CAST(i.page_count AS TEXT) LIKE ? OR i.relative_path LIKE ?)`);
     const query = `%${filter.query}%`;
-    args.push(query, query, query);
+    args.push(query, query, query, query, query, query, query, query, query, query);
   }
   if (filter.format && filter.format !== 'all') {
     where.push('i.format = ?');
@@ -189,7 +262,23 @@ export async function listLibrary(filter: LibraryFilter = {}) {
   }
   if (filter.folder && filter.folder !== 'all') {
     where.push('i.relative_path LIKE ?');
-    args.push(`${filter.folder}%`);
+    args.push(`${filter.folder.replace(/\/$/, '')}/%`);
+  }
+  if (filter.author && filter.author !== 'all') {
+    where.push('i.author = ? COLLATE NOCASE');
+    args.push(filter.author);
+  }
+  if (filter.series && filter.series !== 'all') {
+    where.push('i.series = ? COLLATE NOCASE');
+    args.push(filter.series);
+  }
+  if (filter.language && filter.language !== 'all') {
+    where.push('i.language = ? COLLATE NOCASE');
+    args.push(filter.language);
+  }
+  if (filter.subject && filter.subject !== 'all') {
+    where.push('i.subjects_json LIKE ?');
+    args.push(`%${JSON.stringify(filter.subject)}%`);
   }
   const rows = await database.getAllAsync<LibraryRow>(
     `${LIBRARY_SELECT} WHERE ${where.join(' AND ')} ORDER BY i.title COLLATE NOCASE`,
@@ -206,18 +295,57 @@ export async function getLibraryItem(id: string) {
 
 export async function updateItemMetadata(
   id: string,
-  metadata: { title?: string | null; author?: string | null; coverUri?: string | null },
+  metadata: Partial<BookMetadata> & {
+    coverUri?: string | null;
+    metadataExtracted?: boolean;
+    coverExtractionVersion?: number;
+  },
+  expectedFingerprint?: Pick<LibraryItem, 'providerKey' | 'size' | 'modifiedAt'>,
 ) {
   const database = await getDatabase();
-  await database.runAsync(
-    `UPDATE library_items SET title=COALESCE(?, title), author=COALESCE(?, author),
-     cover_uri=COALESCE(?, cover_uri), updated_at=? WHERE id=?`,
-    metadata.title || null,
-    metadata.author || null,
-    metadata.coverUri || null,
-    now(),
-    id,
-  );
+  const updates: string[] = [];
+  const args: (string | number | null)[] = [];
+  const has = <Key extends keyof typeof metadata>(key: Key) => Object.prototype.hasOwnProperty.call(metadata, key);
+  const set = (column: string, value: string | number | null) => { updates.push(`${column}=?`); args.push(value); };
+
+  if (typeof metadata.title === 'string' && metadata.title.trim()) set('title', metadata.title.trim());
+  if (has('author')) set('author', metadata.author?.trim() || null);
+  if (has('series')) set('series', metadata.series?.trim() || null);
+  if (has('seriesNumber')) set('series_number', metadata.seriesNumber?.trim() || null);
+  if (has('publisher')) set('publisher', metadata.publisher?.trim() || null);
+  if (has('publishedAt')) set('published_at', metadata.publishedAt?.trim() || null);
+  if (has('language')) set('language', metadata.language?.trim() || null);
+  if (has('subjects')) set('subjects_json', serializeSubjects(metadata.subjects));
+  if (has('pageCount')) set('page_count', metadata.pageCount ?? null);
+  if (has('coverUri')) set('cover_uri', typeof metadata.coverUri === 'string' && metadata.coverUri ? metadata.coverUri : null);
+
+  if (has('metadataExtracted')) set('metadata_extracted', metadata.metadataExtracted ? 1 : 0);
+  if (has('coverExtractionVersion')) {
+    set('cover_extraction_version', Math.max(0, Math.floor(metadata.coverExtractionVersion ?? 0)));
+  }
+  if (!updates.length) return;
+  updates.push('updated_at=?');
+  args.push(now(), id);
+  let where = 'id=?';
+  if (expectedFingerprint) {
+    where += ' AND provider_key=? AND size IS ? AND modified_at IS ?';
+    args.push(expectedFingerprint.providerKey, expectedFingerprint.size, expectedFingerprint.modifiedAt);
+  }
+  await database.runAsync(`UPDATE library_items SET ${updates.join(', ')} WHERE ${where}`, ...args);
+}
+
+function serializeSubjects(subjects: readonly string[] | null | undefined) {
+  const normalized = Array.from(new Set((subjects ?? []).map((subject) => subject.trim()).filter(Boolean)));
+  return JSON.stringify(normalized);
+}
+
+function parseSubjects(value: string | null | undefined) {
+  try {
+    const parsed: unknown = JSON.parse(value ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((subject): subject is string => typeof subject === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function saveProgress(item: LibraryItem, locator: ReadingLocator, percent: number) {

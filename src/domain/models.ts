@@ -3,6 +3,18 @@ export type SourceKind = 'drive' | 'android-folder' | 'ios-import' | 'web-import
 export type ReadingStatus = 'unread' | 'reading' | 'finished';
 export type DownloadStatus = 'none' | 'queued' | 'downloading' | 'paused' | 'ready' | 'error';
 
+export interface BookMetadata {
+  title: string | null;
+  author: string | null;
+  series: string | null;
+  seriesNumber: string | null;
+  publisher: string | null;
+  publishedAt: string | null;
+  language: string | null;
+  subjects: string[];
+  pageCount: number | null;
+}
+
 export interface ContentSourceRecord {
   id: string;
   kind: SourceKind;
@@ -13,7 +25,7 @@ export interface ContentSourceRecord {
   lastScanAt: string | null;
 }
 
-export interface LibraryItem {
+export interface LibraryItem extends BookMetadata {
   id: string;
   sourceId: string;
   sourceKind: SourceKind;
@@ -21,12 +33,13 @@ export interface LibraryItem {
   format: ContentFormat;
   name: string;
   title: string;
-  author: string | null;
   relativePath: string;
   mimeType: string | null;
   size: number | null;
   modifiedAt: string | null;
   coverUri: string | null;
+  metadataExtracted: boolean;
+  coverExtractionVersion: number;
   localUri: string | null;
   available: boolean;
   downloadStatus: DownloadStatus;
@@ -72,18 +85,18 @@ export interface DownloadRecord {
   updatedAt: string;
 }
 
-export interface ScanItem {
+export interface ScanItem extends Partial<BookMetadata> {
   providerKey: string;
   format: ContentFormat;
   name: string;
-  title?: string;
-  author?: string | null;
   relativePath: string;
   mimeType?: string | null;
   size?: number | null;
   modifiedAt?: string | null;
   coverUri?: string | null;
   localUri?: string | null;
+  metadataExtracted?: boolean;
+  coverExtractionVersion?: number;
 }
 
 export interface ScanResult {
@@ -113,6 +126,10 @@ export interface LibraryFilter {
   sourceKind?: SourceKind | 'all';
   status?: ReadingStatus | 'all';
   folder?: string | 'all';
+  author?: string | 'all';
+  series?: string | 'all';
+  language?: string | 'all';
+  subject?: string | 'all';
 }
 
 export function formatFromName(name: string): ContentFormat | null {

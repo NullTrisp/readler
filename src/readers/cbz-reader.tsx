@@ -30,7 +30,7 @@ export const CbzReader = forwardRef<ReaderHandle, CbzProps>(function CbzReader(
     void prepareCbz(uri, itemId).then(({ pages: value, metadata }) => {
       if (!mounted) { clearCbzCache(itemId); return; }
       setNaturalPages(value);
-      onMetadata?.({ ...metadata, coverUri: value[0] ?? null });
+      onMetadata?.({ ...metadata, pageCount: value.length || null });
     }).catch((caught) => {
       if (mounted) setError(caught instanceof Error ? caught.message : String(caught));
       clearCbzCache(itemId);

@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
 import { getDatabase } from '@/data/database';
@@ -8,11 +8,21 @@ import {
   listSources,
   removeSource,
   setSetting,
+  updateItemMetadata,
 } from '@/data/repository';
 import type { ContentSourceRecord, LibraryFilter, LibraryItem } from '@/domain/models';
 import { connectDriveFolder, scanDriveSource, signOutDrive, type DriveFolder } from '@/services/drive';
-import { disconnectLocalSource, importLocalFiles, linkAndroidFolder, scanLocalSource } from '@/services/local-source';
+import { disconnectLocalSource, importLocalFiles, linkAndroidFolder, materializeLocalItem, scanLocalSource } from '@/services/local-source';
+import { extractBookMetadata } from '@/services/book-metadata';
 import { syncReadingState } from '@/services/sync';
+import {
+  CURRENT_COVER_EXTRACTION_VERSION,
+  needsMetadataEnrichment,
+  runWithConcurrency,
+} from '@/utils/metadata-enrichment';
+
+const METADATA_CONCURRENCY = Platform.OS === 'web' ? 2 : 1;
+const REFRESH_AFTER_ITEMS = 4;
 
 interface AppContextValue {
   ready: boolean;
@@ -39,6 +49,8 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [sources, setSources] = useState<ContentSourceRecord[]>([]);
+  const enrichingMetadata = useRef(false);
+  const attemptedMetadata = useRef(new Set<string>());
 
   const refresh = useCallback(async (filter: LibraryFilter = {}) => {
     setItems(await listLibrary(filter));
@@ -68,6 +80,47 @@ export function AppProvider({ children }: PropsWithChildren) {
       setReady(true);
     })();
   }, [refresh, refreshSources]);
+
+  useEffect(() => {
+    if (!ready || enrichingMetadata.current) return;
+    const pending = items.filter((item) => needsMetadataEnrichment(item) && !attemptedMetadata.current.has(
+      `${item.id}|${item.size ?? ''}|${item.modifiedAt ?? ''}`,
+    ));
+    if (!pending.length) return;
+
+    enrichingMetadata.current = true;
+    void (async () => {
+      let completed = 0;
+      let refreshQueue = Promise.resolve();
+      await runWithConcurrency(pending, METADATA_CONCURRENCY, async (item) => {
+        const attemptKey = `${item.id}|${item.size ?? ''}|${item.modifiedAt ?? ''}`;
+        try {
+          const uri = Platform.OS === 'web' ? await materializeLocalItem(item) : item.localUri;
+          const metadata = await extractBookMetadata(item, uri);
+          await updateItemMetadata(item.id, {
+            ...metadata,
+            metadataExtracted: true,
+            coverExtractionVersion: CURRENT_COVER_EXTRACTION_VERSION,
+          }, {
+            providerKey: item.providerKey,
+            size: item.size,
+            modifiedAt: item.modifiedAt,
+          });
+        } catch {
+          // Metadata is optional. Avoid a retry loop for one damaged or temporarily unavailable
+          // file, but allow another attempt after restart or when its source fingerprint changes.
+          attemptedMetadata.current.add(attemptKey);
+        }
+        completed += 1;
+        if (completed % REFRESH_AFTER_ITEMS === 0) {
+          refreshQueue = refreshQueue.then(() => refresh()).catch(() => undefined);
+          await refreshQueue;
+        }
+      });
+      await refreshQueue;
+      await refresh();
+    })().finally(() => { enrichingMetadata.current = false; });
+  }, [items, ready, refresh]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
