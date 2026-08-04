@@ -94,7 +94,7 @@ describe('library item scans', () => {
 });
 
 describe('metadata updates and search', () => {
-  it('maps normalized metadata and safely decodes subjects from SQLite rows', async () => {
+  it('maps normalized metadata and treats a persisted local file as ready', async () => {
     database.getFirstAsync.mockResolvedValue({
       id: 'item-1', source_id: 'source-1', source_kind: 'drive', provider_key: 'file-1', format: 'cbz',
       name: 'Issue 1.cbz', title: 'Issue 1', author: 'Writer', series: 'Series', series_number: '1',
@@ -102,15 +102,16 @@ describe('metadata updates and search', () => {
       page_count: 24, metadata_extracted: 1, cover_extraction_version: 1,
       relative_path: 'Series/Issue 1.cbz', mime_type: 'application/zip',
       size: 100, modified_at: '2026-01-01T00:00:00.000Z', cover_uri: 'file://cover.jpg',
-      local_uri: null, download_local_uri: 'idb://drive-download:item-1', available: 1,
+      local_uri: 'file://downloads/item-1.cbz', download_local_uri: null, available: 1,
       updated_at: '2026-01-01T00:00:00.000Z',
-      download_status: null, download_progress: null, reading_status: null, reading_percent: null,
+      download_status: 'downloading', download_progress: 1, reading_status: null, reading_percent: null,
     });
 
     await expect(getLibraryItem('item-1')).resolves.toEqual(expect.objectContaining({
       series: 'Series', seriesNumber: '1', publisher: 'Publisher', publishedAt: '2025-02-03',
       language: 'en', subjects: ['Adventure'], pageCount: 24, metadataExtracted: true,
-      coverExtractionVersion: 1, localUri: 'idb://drive-download:item-1',
+      coverExtractionVersion: 1, localUri: 'file://downloads/item-1.cbz',
+      downloadStatus: 'ready', downloadProgress: 1,
     }));
   });
 

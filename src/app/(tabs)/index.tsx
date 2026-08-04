@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useMemo, useState, type ReactNode } from 'react';
+import { memo, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -65,6 +65,7 @@ export default function LibraryScreen() {
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<string[]>([]);
   const [downloadNotice, setDownloadNotice] = useState<{ message: string; loading: boolean } | null>(null);
+  const opening = useRef(false);
   const activeLocation = location.sourceId && !sources.some((source) => source.id === location.sourceId) ? ROOT_LOCATION : location;
 
   const columns = width >= 1400 ? 6 : width >= 1000 ? 4 : width >= 700 ? 3 : 2;
@@ -125,8 +126,9 @@ export default function LibraryScreen() {
     setLocation(ROOT_LOCATION);
   };
 
-  const open = async (item: LibraryItem) => {
-    if (openingId) return;
+  const open = useCallback(async (item: LibraryItem) => {
+    if (opening.current) return;
+    opening.current = true;
     setOpeningId(item.id);
     try {
       if (item.sourceKind === 'drive' && !item.localUri) {
@@ -143,9 +145,10 @@ export default function LibraryScreen() {
       }
       router.push({ pathname: '/reader', params: { id: item.id } });
     } finally {
+      opening.current = false;
       setOpeningId(null);
     }
-  };
+  }, [refresh, t]);
 
   const goUp = () => {
     if (!activeLocation.sourceId) return;
@@ -202,6 +205,16 @@ export default function LibraryScreen() {
               actions={<Button onPress={goUp}>{t('goToParentFolder')}</Button>}
             />
           : null;
+
+  const renderBook = useCallback(({ item }: { item: LibraryItem }) => <BookCard
+    item={item}
+    width={itemWidth}
+    sourceName={sources.find((candidate) => candidate.id === item.sourceId)?.name}
+    showPath={searching}
+    opening={openingId === item.id || downloadingIds.includes(item.id)}
+    disabled={openingId !== null || downloadingIds.includes(item.id)}
+    onPress={open}
+  />, [downloadingIds, itemWidth, open, openingId, searching, sources]);
 
   const listHeader = <View style={styles.header}>
     <SearchField value={query} onChange={setQuery} />
@@ -327,15 +340,7 @@ export default function LibraryScreen() {
       ListHeaderComponent={listHeader}
       ListEmptyComponent={visibleFolders.length ? null : emptyState}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void sync()} tintColor={colors.primary} />}
-      renderItem={({ item }) => <BookCard
-        item={item}
-        width={itemWidth}
-        sourceName={sources.find((candidate) => candidate.id === item.sourceId)?.name}
-        showPath={searching}
-        opening={openingId === item.id || downloadingIds.includes(item.id)}
-        disabled={openingId !== null || downloadingIds.includes(item.id)}
-        onPress={() => void open(item).catch(() => undefined)}
-      />}
+      renderItem={renderBook}
     />
 
     <FilterAndSortModal
@@ -492,14 +497,14 @@ function FolderCard({ width, name, sourceName, count, onPress }: {
   </Pressable>;
 }
 
-function BookCard({ item, width, sourceName, showPath, opening, disabled, onPress }: {
+const BookCard = memo(function BookCard({ item, width, sourceName, showPath, opening, disabled, onPress }: {
   item: LibraryItem;
   width: number;
   sourceName?: string;
   showPath: boolean;
   opening: boolean;
   disabled: boolean;
-  onPress(): void;
+  onPress(item: LibraryItem): Promise<void>;
 }) {
   const { t } = useTranslation();
   const colors = useReadlerTheme();
@@ -527,7 +532,7 @@ function BookCard({ item, width, sourceName, showPath, opening, disabled, onPres
     accessibilityState={{ busy: opening, disabled }}
     accessibilityValue={{ min: 0, max: 100, now: percent, text: t('progress', { value: percent }) }}
     disabled={disabled}
-    onPress={onPress}
+    onPress={() => void onPress(item).catch(() => undefined)}
     style={({ pressed }) => [styles.bookItem, { width }, pressed && styles.bookItemPressed]}>
     <View style={[styles.coverFrame, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
       <BookCover item={item} placeholder={<View style={[styles.cover, styles.placeholder, { backgroundColor: colors.primaryContainer }]}>
@@ -547,7 +552,20 @@ function BookCard({ item, width, sourceName, showPath, opening, disabled, onPres
     <AppText numberOfLines={2} style={styles.bookTitle}>{item.title}</AppText>
     {supportingCopy ? <AppText muted numberOfLines={1} style={styles.bookMetadata}>{supportingCopy}</AppText> : null}
   </Pressable>;
-}
+}, (previous, next) =>
+  previous.item.id === next.item.id
+  && previous.item.updatedAt === next.item.updatedAt
+  && previous.item.localUri === next.item.localUri
+  && previous.item.downloadStatus === next.item.downloadStatus
+  && previous.item.downloadProgress === next.item.downloadProgress
+  && previous.item.status === next.item.status
+  && previous.item.progress === next.item.progress
+  && previous.width === next.width
+  && previous.sourceName === next.sourceName
+  && previous.showPath === next.showPath
+  && previous.opening === next.opening
+  && previous.disabled === next.disabled
+  && previous.onPress === next.onPress);
 
 function FilterAndSortModal({
   visible,

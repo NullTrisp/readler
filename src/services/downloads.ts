@@ -26,6 +26,7 @@ export async function startDownload(item: LibraryItem, onProgress?: (value: numb
     {
       headers: { Authorization: `Bearer ${token}` },
       onProgress: ({ bytesWritten, totalBytes }) => {
+        if (totalBytes > 0 && bytesWritten >= totalBytes) return;
         onProgress?.(totalBytes > 0 ? bytesWritten / totalBytes : 0);
         void saveDownload({
           itemId: item.id,
@@ -81,6 +82,7 @@ export async function resumeDownload(item: LibraryItem, onProgress?: (value: num
   const task = DownloadTask.fromSavable(JSON.parse(record.resumeData), {
     headers: { Authorization: `Bearer ${token}` },
     onProgress: ({ bytesWritten, totalBytes }) => {
+      if (totalBytes > 0 && bytesWritten >= totalBytes) return;
       onProgress?.(totalBytes > 0 ? bytesWritten / totalBytes : 0);
       void saveDownload({ ...record, status: 'downloading', bytesWritten, totalBytes, updatedAt: timestamp() });
     },

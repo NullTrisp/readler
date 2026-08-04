@@ -196,6 +196,7 @@ export async function replaceSourceItems(source: ContentSourceRecord, items: Sca
 }
 
 function mapLibraryRow(row: LibraryRow): LibraryItem {
+  const localUri = row.download_local_uri ?? row.local_uri;
   return {
     id: row.id,
     sourceId: row.source_id,
@@ -219,10 +220,10 @@ function mapLibraryRow(row: LibraryRow): LibraryItem {
     size: row.size,
     modifiedAt: row.modified_at,
     coverUri: row.cover_uri,
-    localUri: row.download_local_uri ?? row.local_uri,
+    localUri,
     available: Boolean(row.available),
-    downloadStatus: row.download_status ?? (row.source_kind === 'drive' ? 'none' : 'ready'),
-    downloadProgress: row.download_progress ?? 0,
+    downloadStatus: localUri ? 'ready' : row.download_status ?? (row.source_kind === 'drive' ? 'none' : 'ready'),
+    downloadProgress: localUri ? 1 : row.download_progress ?? 0,
     status: row.reading_status ?? 'unread',
     progress: row.reading_percent ?? 0,
     updatedAt: row.updated_at,
