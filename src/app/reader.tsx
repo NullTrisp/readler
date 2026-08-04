@@ -2,9 +2,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AppState, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTranslation } from 'react-i18next';
 
 import { AppText, Loading, palette } from '@/components/readler-ui';
 import { getLibraryItem, getProgress, getSetting, listBookmarks, saveProgress, setSetting, toggleBookmark, updateItemMetadata } from '@/data/repository';
@@ -84,9 +84,11 @@ export default function ReaderScreen() {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => { if (state !== 'active') void persist(); });
-    return () => { subscription.remove(); if (timer.current) clearTimeout(timer.current); if (syncTimer.current) clearTimeout(syncTimer.current); void persist().then(() => {
-      const drive = sources.find((source) => source.kind === 'drive'); if (drive) return syncReadingState(drive); return undefined;
-    }); };
+    return () => {
+      subscription.remove(); if (timer.current) clearTimeout(timer.current); if (syncTimer.current) clearTimeout(syncTimer.current); void persist().then(() => {
+        const drive = sources.find((source) => source.kind === 'drive'); if (drive) return syncReadingState(drive); return undefined;
+      });
+    };
   }, [persist, sources]);
 
   const onLocation = useCallback((nextLocator: ReadingLocator, nextPercent: number) => {
@@ -127,7 +129,7 @@ export default function ReaderScreen() {
   };
   return <View style={styles.container}><StatusBar hidden={!controls} style="light" />
     {item.format === 'cbz' ? <CbzReader ref={reader} {...common} itemId={item.id} rtl={rtl} /> : item.format === 'epub' ? <EpubReader ref={reader} {...common} /> : <PdfReader ref={reader} {...common} />}
-    {controls && <SafeAreaView pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+    {controls && <SafeAreaView style={[StyleSheet.absoluteFill, { pointerEvents: 'box-none' }]}>
       <View style={styles.top}><Pressable accessibilityRole="button" accessibilityLabel={t('back')} onPress={leaveReader} style={styles.circle}>
         <SymbolView name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }} size={22} tintColor="#fff" />
       </Pressable><AppText style={styles.readerTitle} numberOfLines={1}>{item.title}</AppText><Pressable
@@ -137,12 +139,12 @@ export default function ReaderScreen() {
         onPress={() => void bookmark()}
         style={styles.circle}
       ><SymbolView
-        name={bookmarked
-          ? { ios: 'bookmark.fill', android: 'bookmark', web: 'bookmark' }
-          : { ios: 'bookmark', android: 'bookmark_border', web: 'bookmark_border' }}
-        size={21}
-        tintColor="#fff"
-      /></Pressable></View>
+            name={bookmarked
+              ? { ios: 'bookmark.fill', android: 'bookmark', web: 'bookmark' }
+              : { ios: 'bookmark', android: 'bookmark_border', web: 'bookmark_border' }}
+            size={21}
+            tintColor="#fff"
+          /></Pressable></View>
       <View style={styles.bottom}><Pressable accessibilityRole="adjustable" accessibilityLabel={t('positionSlider')}
         onLayout={(event) => { trackWidth.current = event.nativeEvent.layout.width; }}
         onPress={(event) => reader.current?.seek(Math.max(0, Math.min(1, event.nativeEvent.locationX / trackWidth.current)))}

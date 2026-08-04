@@ -37,8 +37,7 @@ export function BookCover({ item, placeholder }: BookCoverProps) {
     return <View
       accessible={false}
       importantForAccessibility="no-hide-descendants"
-      pointerEvents="none"
-      style={styles.cover}>
+      style={[styles.cover, { pointerEvents: 'none' }]}>
       <Pdf
         source={{ uri: pdfUri }}
         page={1}
