@@ -54,5 +54,5 @@ See [Google Drive setup](docs/GOOGLE_DRIVE_SETUP.md) and the [privacy checklist]
 
 ## TODO
 [] Real notifications for downloads
-[] Fix Android OAuth flow
 [] Test in IOS env
+[] Next comic function

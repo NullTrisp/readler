@@ -1,4 +1,5 @@
 import { GoogleSignin, isSuccessResponse } from '@react-native-google-signin/google-signin';
+import { Platform } from 'react-native';
 
 export const DRIVE_SCOPES = [
   'https://www.googleapis.com/auth/drive.readonly',
@@ -14,7 +15,7 @@ let configured = false;
 function configureGoogle() {
   if (configured) return;
   GoogleSignin.configure({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    webClientId: Platform.OS === 'android' ? undefined : process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     scopes: DRIVE_SCOPES,
     offlineAccess: false,
@@ -23,7 +24,9 @@ function configureGoogle() {
 }
 
 export function isGoogleConfigured() {
-  return Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
+  return Boolean(Platform.OS === 'android'
+    ? process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+    : process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
 }
 
 export async function signInToDrive(): Promise<DriveUser | null> {

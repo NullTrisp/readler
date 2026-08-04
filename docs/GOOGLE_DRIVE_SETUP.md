@@ -6,7 +6,7 @@
 4. Create Android OAuth clients for every debug, EAS, and Play App Signing SHA-1 certificate using package `com.nicolas.readler`.
 5. Create an iOS OAuth client for bundle ID `com.nicolas.readler` and a Web application client ID.
 6. Add every development and production web origin to the Web client's **Authorized JavaScript origins**. Do not add a client secret to Readler.
-7. Put the Web and iOS client IDs in `.env.local` using `.env.example`.
+7. Put the Web, Android, and iOS client IDs in `.env.local` using `.env.example`. The Android ID enables Drive on Android; Google Sign-In matches it natively through the package name and SHA-1 rather than a JavaScript configure parameter.
 8. Replace `REPLACE_WITH_IOS_CLIENT_ID` in `app.json` with the reversed iOS client ID, for example `com.googleusercontent.apps.123456789`.
 9. Rebuild the native development clients whenever the native OAuth configuration changes.
 
