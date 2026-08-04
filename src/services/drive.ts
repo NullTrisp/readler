@@ -165,6 +165,7 @@ export async function uploadDriveState(name: string, envelope: SyncEnvelopeV1, e
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
     body,
   });
+  if (response.status === 404 && existingId) return uploadDriveState(name, envelope);
   if (!response.ok) throw new Error(`Could not upload sync state (${response.status}).`);
   return (await response.json()) as { id: string };
 }
