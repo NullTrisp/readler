@@ -1,14 +1,16 @@
 import { Directory, Paths } from 'expo-file-system';
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { getUncompressedSize, isPasswordProtected, unzip } from 'react-native-zip-archive';
 import { Image } from 'expo-image';
 
 import { naturalCompare } from '@/utils/natural-sort';
 import { parseComicInfo } from '@/utils/comic-info';
 import { pageFromProgress } from '@/utils/locators';
+import { clampZoomOffset, zoomOffsetForTap } from './zoom';
 import type { ReaderHandle, ReaderProps } from './types';
 
 const MAX_FILES = 10_000;
@@ -19,12 +21,18 @@ interface CbzProps extends ReaderProps { itemId: string; rtl: boolean; }
 export const CbzReader = forwardRef<ReaderHandle, CbzProps>(function CbzReader(
   { uri, initialLocator, itemId, rtl, onLocation, onToggleControls, onMetadata }, ref,
 ) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const list = useRef<FlatList<string>>(null);
   const [naturalPages, setNaturalPages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [index, setIndex] = useState(initialLocator?.kind === 'page' ? Math.max(0, initialLocator.index - 1) : 0);
   const pages = useMemo(() => rtl ? [...naturalPages].reverse() : naturalPages, [naturalPages, rtl]);
+  const handleZoomChange = useCallback((zoomed: boolean) => setScrollEnabled(!zoomed), []);
+  const move = useCallback((next: number, animated: boolean) => {
+    setScrollEnabled(true);
+    list.current?.scrollToIndex({ index: next, animated });
+  }, []);
   useEffect(() => {
     let mounted = true;
     void prepareCbz(uri, itemId).then(({ pages: value, metadata }) => {
@@ -38,16 +46,16 @@ export const CbzReader = forwardRef<ReaderHandle, CbzProps>(function CbzReader(
     return () => { mounted = false; clearCbzCache(itemId); };
   }, [itemId, onMetadata, uri]);
   useImperativeHandle(ref, () => ({
-    previous: () => list.current?.scrollToIndex({ index: Math.max(0, index - 1), animated: true }),
-    next: () => list.current?.scrollToIndex({ index: Math.min(pages.length - 1, index + 1), animated: true }),
-    seek: (progress) => list.current?.scrollToIndex({ index: pageFromProgress(progress, pages.length) - 1, animated: false }),
-  }), [index, pages.length]);
+    previous: () => move(Math.max(0, index - 1), true),
+    next: () => move(Math.min(pages.length - 1, index + 1), true),
+    seek: (progress) => move(pageFromProgress(progress, pages.length) - 1, false),
+  }), [index, move, pages.length]);
   if (error) return <View style={styles.loading}><ActivityIndicator color="#FFB4AB" /></View>;
   if (!pages.length) return <View style={styles.loading}><ActivityIndicator color="#81C784" /></View>;
-  return <FlatList ref={list} data={pages} horizontal pagingEnabled initialScrollIndex={Math.min(index, pages.length - 1)}
+  return <FlatList ref={list} data={pages} horizontal pagingEnabled scrollEnabled={scrollEnabled} initialScrollIndex={Math.min(index, pages.length - 1)}
     keyExtractor={(page) => page} getItemLayout={(_, itemIndex) => ({ length: width, offset: width * itemIndex, index: itemIndex })}
     onMomentumScrollEnd={(event) => { const next = Math.round(event.nativeEvent.contentOffset.x / width); setIndex(next); onLocation({ kind: 'page', index: next + 1, total: pages.length }, (next + 1) / pages.length); }}
-    renderItem={({ item }) => <ZoomablePage uri={item} width={width} onTap={onToggleControls} />} />;
+    renderItem={({ item }) => <ZoomablePage uri={item} width={width} height={height} onTap={onToggleControls} onZoomChange={handleZoomChange} />} />;
 });
 
 async function prepareCbz(uri: string, itemId: string) {
@@ -89,13 +97,66 @@ async function readComicInfo(root: Directory) {
   return parseComicInfo(await comicInfo.text());
 }
 
-function ZoomablePage({ uri, width, onTap }: { uri: string; width: number; onTap(): void }) {
+function ZoomablePage({ uri, width, height, onTap, onZoomChange }: { uri: string; width: number; height: number; onTap(): void; onZoomChange(zoomed: boolean): void }) {
+  const [zoomed, setZoomed] = useState(false);
   const scale = useSharedValue(1);
-  const saved = useSharedValue(1);
-  const pinch = Gesture.Pinch().onUpdate((event) => { scale.value = Math.max(1, Math.min(4, saved.value * event.scale)); }).onEnd(() => { saved.value = scale.value; });
-  const tap = Gesture.Tap().onEnd(() => { onTap(); }).runOnJS(true);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  return <GestureDetector gesture={Gesture.Simultaneous(pinch, tap)}><View style={[styles.page, { width }]}><Animated.View style={[styles.imageWrap, style]}><Image source={{ uri }} style={styles.image} contentFit="contain" /></Animated.View></View></GestureDetector>;
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedX = useSharedValue(0);
+  const savedY = useSharedValue(0);
+  const tapPending = useSharedValue(false);
+  const tapSequence = useSharedValue(0);
+  const updateZoomed = (next: boolean) => { setZoomed(next); onZoomChange(next); };
+  const pinch = Gesture.Pinch()
+    .onBegin(() => { scheduleOnRN(onZoomChange, true); })
+    .onUpdate((event) => {
+      scale.value = Math.max(1, Math.min(4, savedScale.value * event.scale));
+      translateX.value = clampZoomOffset(translateX.value, width, scale.value);
+      translateY.value = clampZoomOffset(translateY.value, height, scale.value);
+    })
+    .onFinalize(() => {
+      if (scale.value < 1.01) { scale.value = 1; translateX.value = 0; translateY.value = 0; }
+      savedScale.value = scale.value;
+      savedX.value = translateX.value;
+      savedY.value = translateY.value;
+      scheduleOnRN(updateZoomed, scale.value > 1);
+    });
+  const pan = Gesture.Pan().enabled(zoomed)
+    .onBegin(() => { scheduleOnRN(onZoomChange, true); })
+    .onUpdate((event) => {
+      translateX.value = clampZoomOffset(savedX.value + event.translationX, width, scale.value);
+      translateY.value = clampZoomOffset(savedY.value + event.translationY, height, scale.value);
+    })
+    .onFinalize(() => { savedX.value = translateX.value; savedY.value = translateY.value; });
+  const tap = Gesture.Tap().onEnd((event, success) => {
+    if (!success) return;
+    const sequence = tapSequence.value + 1;
+    tapSequence.value = sequence;
+    if (tapPending.value) {
+      tapPending.value = false;
+      const next = scale.value > 1 ? 1 : 2;
+      const nextX = next > 1 ? zoomOffsetForTap(event.x, width, next) : 0;
+      const nextY = next > 1 ? zoomOffsetForTap(event.y, height, next) : 0;
+      scale.value = withTiming(next);
+      savedScale.value = next;
+      translateX.value = withTiming(nextX);
+      translateY.value = withTiming(nextY);
+      savedX.value = nextX;
+      savedY.value = nextY;
+      scheduleOnRN(updateZoomed, next > 1);
+      return;
+    }
+    tapPending.value = true;
+    setTimeout(() => {
+      if (!tapPending.value || tapSequence.value !== sequence) return;
+      tapPending.value = false;
+      scheduleOnRN(onTap);
+    }, 300);
+  });
+  const gesture = Gesture.Simultaneous(pinch, zoomed ? Gesture.Exclusive(pan, tap) : tap);
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }] }));
+  return <GestureDetector gesture={gesture}><View style={[styles.page, { width }]}><Animated.View style={[styles.imageWrap, style]}><Image source={{ uri }} style={styles.image} contentFit="contain" /></Animated.View></View></GestureDetector>;
 }
 
 const styles = StyleSheet.create({ loading: { flex: 1, backgroundColor: '#080b12', alignItems: 'center', justifyContent: 'center' }, page: { flex: 1, backgroundColor: '#080b12', overflow: 'hidden' }, imageWrap: { flex: 1 }, image: { flex: 1 } });
