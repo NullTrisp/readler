@@ -30,7 +30,6 @@ export function LibraryHeader({
   mode,
   downloadNotice,
   location,
-  sourceName,
   breadcrumbParts,
   sort,
   searching,
@@ -55,7 +54,6 @@ export function LibraryHeader({
   mode: LibraryMode | null;
   downloadNotice: DownloadNotice | null;
   location: LibraryLocation;
-  sourceName?: string;
   breadcrumbParts: LibraryBreadcrumb[];
   sort: LibrarySort;
   searching: boolean;
@@ -138,7 +136,6 @@ export function LibraryHeader({
     <View style={styles.contextRow}>
       <Breadcrumb
         location={location}
-        sourceName={sourceName}
         parts={breadcrumbParts}
         onNavigate={onNavigate}
       />
@@ -249,9 +246,8 @@ function Chip({ active, label, icon, onPress }: {
   </Pressable>;
 }
 
-function Breadcrumb({ location, sourceName, parts, onNavigate }: {
+function Breadcrumb({ location, parts, onNavigate }: {
   location: LibraryLocation;
-  sourceName?: string;
   parts: LibraryBreadcrumb[];
   onNavigate(location: LibraryLocation): void;
 }) {
@@ -263,11 +259,6 @@ function Breadcrumb({ location, sourceName, parts, onNavigate }: {
     target: ROOT_LOCATION,
   }];
   if (location.sourceId) {
-    entries.push({
-      key: `source-${location.sourceId}`,
-      name: sourceName ?? t('sourceLocal'),
-      target: { sourceId: location.sourceId, path: '' },
-    });
     for (const part of parts) {
       entries.push({
         key: `${location.sourceId}-${part.path}`,

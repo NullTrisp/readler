@@ -103,7 +103,6 @@ export default function LibraryScreen() {
   const advancedFilterCount = Number(status !== 'all') + Number(series !== 'all') + Number(language !== 'all');
   const anyFilterActive = format !== 'all' || advancedFilterCount > 0;
   const allActive = !anyFilterActive && activeLocation.sourceId === null && activeLocation.path === '';
-  const sourceAtLocation = sources.find((candidate) => candidate.id === activeLocation.sourceId);
   const breadcrumbParts = useMemo(() => {
     if (!activeLocation.sourceId) return [];
     return libraryBreadcrumbs(activeLocation).filter((part) => part.path.length > 0);
@@ -235,7 +234,6 @@ export default function LibraryScreen() {
     mode={mode}
     downloadNotice={downloadNotice}
     location={activeLocation}
-    sourceName={sourceAtLocation?.name}
     breadcrumbParts={breadcrumbParts}
     sort={sort}
     searching={searching}
