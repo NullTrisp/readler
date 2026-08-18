@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { memo, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +17,8 @@ import {
 
 import { BookCover } from '@/components/library/book-cover';
 import { AppText, Button, Screen, useReadlerTheme } from '@/components/readler-ui';
-import type { ContentFormat, LibraryItem, ReadingStatus } from '@/domain/models';
+import { getDownload } from '@/data/repository';
+import { downloadIsReady, type ContentFormat, type LibraryItem, type ReadingStatus } from '@/domain/models';
 import { startDownload } from '@/services/downloads';
 import { canLinkFolder, useApp } from '@/state/app-provider';
 import {
@@ -64,9 +65,12 @@ export default function LibraryScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<string[]>([]);
-  const [downloadNotice, setDownloadNotice] = useState<{ message: string; loading: boolean } | null>(null);
+  const [downloadNotice, setDownloadNotice] = useState<{ message: string; loading: boolean; error?: boolean } | null>(null);
   const opening = useRef(false);
+  const pendingOpenId = useRef<string | null>(null);
   const activeLocation = location.sourceId && !sources.some((source) => source.id === location.sourceId) ? ROOT_LOCATION : location;
+
+  useFocusEffect(useCallback(() => () => { pendingOpenId.current = null; }, []));
 
   const columns = width >= 1400 ? 6 : width >= 1000 ? 4 : width >= 700 ? 3 : 2;
   const contentWidth = Math.min(width, CONTENT_MAX_WIDTH);
@@ -132,14 +136,29 @@ export default function LibraryScreen() {
     setOpeningId(item.id);
     try {
       if (item.sourceKind === 'drive' && !item.localUri) {
+        pendingOpenId.current = item.id;
         setDownloadingIds((ids) => [...ids, item.id]);
         setDownloadNotice({ message: t('downloadStarted', { title: item.title }), loading: true });
-        void startDownload(item, () => void refresh())
+        void startDownload(item, () => void refresh().catch(() => undefined))
           .then(async () => {
-            await refresh();
+            const download = await getDownload(item.id);
+            await refresh().catch(() => undefined);
+            if (!downloadIsReady(download)) {
+              if (pendingOpenId.current === item.id) pendingOpenId.current = null;
+              setDownloadNotice(null);
+              return;
+            }
             setDownloadNotice({ message: t('downloadFinished', { title: item.title }), loading: false });
+            if (pendingOpenId.current === item.id) {
+              pendingOpenId.current = null;
+              router.push({ pathname: '/reader', params: { id: item.id } });
+            }
           })
-          .catch(() => void refresh())
+          .catch(async () => {
+            await refresh().catch(() => undefined);
+            if (pendingOpenId.current === item.id) pendingOpenId.current = null;
+            setDownloadNotice({ message: t('downloadFailed', { title: item.title }), loading: false, error: true });
+          })
           .finally(() => setDownloadingIds((ids) => ids.filter((id) => id !== item.id)));
         return;
       }
@@ -268,11 +287,14 @@ export default function LibraryScreen() {
     {mode === 'drive' && downloadNotice ? <View
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
-      style={[styles.downloadBanner, { backgroundColor: colors.primaryContainer }]}>
+      style={[styles.downloadBanner, {
+        backgroundColor: downloadNotice.error ? colors.surface : colors.primaryContainer,
+        borderColor: downloadNotice.error ? colors.danger : colors.primaryContainer,
+      }]}>
       {downloadNotice.loading ? <ActivityIndicator color={colors.onPrimaryContainer} /> : null}
-      <AppText style={{ color: colors.onPrimaryContainer, flex: 1 }}>{downloadNotice.message}</AppText>
+      <AppText style={{ color: downloadNotice.error ? colors.danger : colors.onPrimaryContainer, flex: 1 }}>{downloadNotice.message}</AppText>
       <Pressable accessibilityRole="button" accessibilityLabel={t('dismiss')} onPress={() => setDownloadNotice(null)} style={styles.iconButton}>
-        <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color={colors.onPrimaryContainer} size={18} />
+        <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color={downloadNotice.error ? colors.danger : colors.onPrimaryContainer} size={18} />
       </Pressable>
     </View> : null}
 
@@ -770,7 +792,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
-  downloadBanner: { minHeight: 60, borderRadius: 14, paddingLeft: 14, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  downloadBanner: { minHeight: 60, borderWidth: 1, borderRadius: 14, paddingLeft: 14, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   errorCopy: { flex: 1, paddingVertical: 10 },
   bannerAction: { minHeight: 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },

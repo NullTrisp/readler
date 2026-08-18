@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ReactNode } from 'react';
-import { SymbolView } from 'expo-symbols';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, useColorScheme, type TextProps, type ViewStyle } from 'react-native';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View, useColorScheme, type TextProps, type ViewStyle } from 'react-native';
 
 export const palette = {
   green50: '#E8F5E9', green100: '#C8E6C9', green300: '#81C784', green600: '#43A047',
@@ -67,7 +67,7 @@ export function Card({ children, style }: PropsWithChildren<{ style?: ViewStyle 
 
 export function AppText({ children, muted, title, style, ...props }: TextProps & { muted?: boolean; title?: boolean }) {
   const colors = useReadlerTheme();
-  return <Text {...props} style={[styles.text, { color: muted ? colors.onSurfaceVariant : colors.onSurface }, title && styles.title, style]}>{children}</Text>;
+  return <Text {...props} accessibilityRole={title ? 'header' : props.accessibilityRole} style={[styles.text, { color: muted ? colors.onSurfaceVariant : colors.onSurface }, title && styles.title, style]}>{children}</Text>;
 }
 
 export function Button({ children, onPress, secondary, danger, disabled, loading, icon }: PropsWithChildren<{
@@ -78,26 +78,40 @@ export function Button({ children, onPress, secondary, danger, disabled, loading
   const backgroundColor = inactive ? colors.disabledContainer : danger ? colors.danger : secondary ? colors.primaryContainer : colors.primary;
   const pressedBackgroundColor = danger ? colors.dangerPressed : secondary ? colors.primaryContainer : colors.primaryPressed;
   const textColor = inactive ? colors.onDisabled : danger ? colors.onDanger : secondary ? colors.onPrimaryContainer : colors.onPrimary;
-  return <Pressable accessibilityRole="button" accessibilityState={{ busy: Boolean(loading), disabled: Boolean(inactive) }} disabled={inactive} onPress={onPress} style={({ pressed }) => [
+  return <Pressable accessibilityRole="button" accessibilityState={{ busy: Boolean(loading), disabled: Boolean(inactive) }} disabled={inactive} onPress={onPress} style={({ pressed, focused }: { pressed: boolean; focused?: boolean }) => [
     styles.button,
     { backgroundColor },
     pressed && !inactive && { backgroundColor: pressedBackgroundColor, transform: [{ scale: 0.995 }] },
-  ]}>{loading ? <ActivityIndicator color={textColor} /> : icon}<Text style={[styles.buttonText, { color: textColor }]}>{children}</Text></Pressable>;
+    focused && { outlineColor: colors.outline, outlineOffset: 3, outlineStyle: 'solid', outlineWidth: 2 },
+  ]}>{loading ? <ActivityIndicator accessible={false} color={textColor} /> : icon}<Text style={[styles.buttonText, { color: textColor }]}>{children}</Text></Pressable>;
 }
 
 export function Loading() {
   const colors = useReadlerTheme();
-  return <View style={styles.center}><ActivityIndicator color={colors.primary} size="large" /></View>;
+  return <View accessible accessibilityRole="progressbar" accessibilityState={{ busy: true }} style={styles.center}><ActivityIndicator accessible={false} color={colors.primary} size="large" /></View>;
 }
 
-export function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
+export function EmptyState({ title, body, action, icon = { ios: 'books.vertical', android: 'local_library', web: 'local_library' } }: {
+  title: string; body: string; action?: ReactNode; icon?: SymbolViewProps['name'];
+}) {
   const colors = useReadlerTheme();
   return <View style={styles.empty}><SymbolView
     accessible={false}
-    name={{ ios: 'books.vertical', android: 'local_library', web: 'local_library' }}
+    name={icon}
     size={52}
     tintColor={colors.primary}
   /><AppText title>{title}</AppText><AppText muted style={{ textAlign: 'center' }}>{body}</AppText>{action}</View>;
+}
+
+export function confirmAction(title: string, message: string, cancel: string, confirm: string, action: () => void, destructive = false) {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) action();
+    return;
+  }
+  Alert.alert(title, message, [
+    { text: cancel, style: 'cancel' },
+    { text: confirm, style: destructive ? 'destructive' : 'default', onPress: action },
+  ]);
 }
 
 const styles = StyleSheet.create({

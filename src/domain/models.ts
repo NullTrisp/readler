@@ -86,6 +86,10 @@ export interface DownloadRecord {
   updatedAt: string;
 }
 
+export function downloadIsReady(record: Pick<DownloadRecord, 'status' | 'localUri'> | null | undefined) {
+  return record?.status === 'ready' && Boolean(record.localUri);
+}
+
 export interface ScanItem extends Partial<BookMetadata> {
   providerKey: string;
   format: ContentFormat;
