@@ -12,15 +12,24 @@ export const PdfReader = forwardRef<ReaderHandle, ReaderProps>(function PdfReade
   const pdf = useRef<PdfRef>(null);
   const current = useRef(initialLocator?.kind === 'page' ? initialLocator.index : 1);
   const total = useRef(initialLocator?.kind === 'page' ? initialLocator.total ?? 1 : 1);
+  const ready = useRef(false);
   useImperativeHandle(ref, () => ({
-    previous: () => pdf.current?.setPage(Math.max(1, current.current - 1)),
-    next: () => pdf.current?.setPage(Math.min(total.current, current.current + 1)),
+    previous: () => {
+      if (!ready.current || current.current <= 1) return !ready.current;
+      pdf.current?.setPage(current.current - 1);
+      return true;
+    },
+    next: () => {
+      if (!ready.current || current.current >= total.current) return !ready.current;
+      pdf.current?.setPage(current.current + 1);
+      return true;
+    },
     seek: (progress) => pdf.current?.setPage(pageFromProgress(progress, total.current)),
   }));
   return <View style={styles.container} onTouchEnd={onToggleControls}>
     <Pdf ref={pdf} source={{ uri }} page={current.current} trustAllCerts={false} style={styles.pdf}
       enableDoubleTapZoom horizontal={false} spacing={8}
-      onLoadComplete={(pages) => { total.current = pages; onMetadata?.({ pageCount: pages }); }}
+      onLoadComplete={(pages) => { ready.current = true; total.current = pages; onMetadata?.({ pageCount: pages }); }}
       onPageChanged={(page, pages) => { current.current = page; total.current = pages; onLocation({ kind: 'page', index: page, total: pages }, page / pages); }} />
   </View>;
 });

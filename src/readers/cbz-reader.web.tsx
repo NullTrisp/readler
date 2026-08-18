@@ -61,8 +61,16 @@ export const CbzReader = forwardRef<ReaderHandle, CbzProps>(function CbzReader(
   };
 
   useImperativeHandle(ref, () => ({
-    previous: () => move(index - 1),
-    next: () => move(index + 1),
+    previous: () => {
+      if (!pages.length || index <= 0) return Boolean(!pages.length);
+      move(index - 1);
+      return true;
+    },
+    next: () => {
+      if (!pages.length || index >= pages.length - 1) return Boolean(!pages.length);
+      move(index + 1);
+      return true;
+    },
     seek: (progress) => move(pageFromProgress(progress, pages.length) - 1),
   }));
 

@@ -1,5 +1,6 @@
 import { resolveLibraryMode, sourceMatchesLibraryMode, type LibraryItem } from '@/domain/models';
 import {
+  adjacentLibraryItem,
   libraryBreadcrumbs,
   libraryFolderContents,
   libraryFolders,
@@ -82,6 +83,20 @@ describe('library sorting', () => {
       { ...item, id: 'alpha', title: 'Alpha', progress: 0.8 },
     ];
     expect(sortLibraryItems(values, 'progress').map((value) => value.id)).toEqual(['alpha', 'zeta', 'low']);
+  });
+
+  it('finds adjacent books only within the same source folder', () => {
+    const values = [
+      { ...item, id: 'middle', title: 'Middle' },
+      { ...item, id: 'last', title: 'Zeta' },
+      { ...item, id: 'first', title: 'Alpha' },
+      { ...item, id: 'other-folder', title: 'Zulu', relativePath: 'Other/Zulu.epub' },
+      { ...item, id: 'other-source', title: 'Aardvark', sourceId: 'other-source' },
+    ];
+    expect(adjacentLibraryItem(values, 'middle', -1)?.id).toBe('first');
+    expect(adjacentLibraryItem(values, 'middle', 1)?.id).toBe('last');
+    expect(adjacentLibraryItem(values, 'first', -1)).toBeNull();
+    expect(adjacentLibraryItem(values, 'last', 1)).toBeNull();
   });
 });
 

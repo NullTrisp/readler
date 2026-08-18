@@ -77,8 +77,16 @@ export const PdfReader = forwardRef<ReaderHandle, ReaderProps>(function PdfReade
 
   const move = (next: number) => setPage(Math.max(1, Math.min(pages, next)));
   useImperativeHandle(ref, () => ({
-    previous: () => move(page - 1),
-    next: () => move(page + 1),
+    previous: () => {
+      if (loading || page <= 1) return loading;
+      move(page - 1);
+      return true;
+    },
+    next: () => {
+      if (loading || page >= pages) return loading;
+      move(page + 1);
+      return true;
+    },
     seek: (progress) => move(pageFromProgress(progress, pages)),
   }));
 

@@ -1,8 +1,8 @@
 import type { BookMetadata, ReadingLocator } from '@/domain/models';
 
 export interface ReaderHandle {
-  previous(): void;
-  next(): void;
+  previous(): boolean;
+  next(): boolean;
   seek(progress: number): void;
 }
 

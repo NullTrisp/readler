@@ -10,10 +10,18 @@ export const EpubReader = forwardRef<ReaderHandle, ReaderProps>(function EpubRea
   { uri, initialLocator, onLocation, onToggleControls, onMetadata },
   ref,
 ) {
-  const { goNext, goPrevious, goToLocation, getLocations, getMeta } = useReader();
+  const { atEnd, atStart, goNext, goPrevious, goToLocation, getLocations, getMeta, isLoading } = useReader();
   useImperativeHandle(ref, () => ({
-    previous: () => goPrevious(),
-    next: () => goNext(),
+    previous: () => {
+      if (isLoading || atStart) return isLoading;
+      goPrevious();
+      return true;
+    },
+    next: () => {
+      if (isLoading || atEnd) return isLoading;
+      goNext();
+      return true;
+    },
     seek: (progress) => {
       const locations = getLocations();
       const target = locations[Math.round(clampProgress(progress) * (locations.length - 1))];

@@ -88,6 +88,16 @@ export function sortLibraryItems(items: readonly LibraryItem[], sort: LibrarySor
   });
 }
 
+export function adjacentLibraryItem(items: readonly LibraryItem[], currentId: string, direction: -1 | 1) {
+  const current = items.find((item) => item.id === currentId);
+  if (!current) return null;
+  const folder = folderPathForItem(current);
+  const ordered = sortLibraryItems(items.filter((item) =>
+    item.sourceId === current.sourceId && folderPathForItem(item) === folder));
+  const index = ordered.findIndex((item) => item.id === currentId);
+  return ordered[index + direction] ?? null;
+}
+
 export function libraryFolders(items: readonly LibraryItem[]) {
   return Array.from(new Set(items.map(folderPathForItem).filter(Boolean))).sort(compareText);
 }

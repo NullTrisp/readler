@@ -12,6 +12,7 @@ export const EpubReader = forwardRef<ReaderHandle, ReaderProps>(function EpubRea
   const host = useRef<HTMLElement | null>(null);
   const book = useRef<Book | null>(null);
   const rendition = useRef<Rendition | null>(null);
+  const boundary = useRef({ atStart: false, atEnd: false });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +31,7 @@ export const EpubReader = forwardRef<ReaderHandle, ReaderProps>(function EpubRea
       const loadedRendition = loadedBook.renderTo(host.current, { width: '100%', height: '100%', spread: 'none', flow: 'paginated' });
       rendition.current = loadedRendition;
       loadedRendition.on('relocated', (location: Location) => {
+        boundary.current = { atStart: location.atStart, atEnd: location.atEnd };
         const cfi = location.start.cfi;
         const percent = clampProgress(loadedBook.locations.percentageFromCfi(cfi));
         onLocation({ kind: 'epubCfi', cfi, percent }, percent);
@@ -48,8 +50,16 @@ export const EpubReader = forwardRef<ReaderHandle, ReaderProps>(function EpubRea
   }, [initialLocator, onLocation, onMetadata, onToggleControls, uri]);
 
   useImperativeHandle(ref, () => ({
-    previous: () => { void rendition.current?.prev(); },
-    next: () => { void rendition.current?.next(); },
+    previous: () => {
+      if (loading || boundary.current.atStart) return loading;
+      void rendition.current?.prev();
+      return true;
+    },
+    next: () => {
+      if (loading || boundary.current.atEnd) return loading;
+      void rendition.current?.next();
+      return true;
+    },
     seek: (progress) => {
       const cfi = book.current?.locations.cfiFromPercentage(clampProgress(progress));
       if (cfi) void rendition.current?.display(cfi);

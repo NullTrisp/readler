@@ -3,26 +3,28 @@ import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AppState, Platform, Pressable, StyleSheet, View, useWindowDimensions, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Platform, Pressable, StyleSheet, View, useWindowDimensions, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppText, Loading, palette } from '@/components/readler-ui';
+import { AppText, Loading, confirmAction, palette } from '@/components/readler-ui';
 import { getLibraryItem, getProgress, getSetting, listBookmarks, saveProgress, setSetting, toggleBookmark, updateItemMetadata } from '@/data/repository';
 import { sourceMatchesLibraryMode, type BookMetadata, type LibraryItem, type ReadingLocator } from '@/domain/models';
 import { CbzReader } from '@/readers/cbz-reader';
 import { EpubReader } from '@/readers/epub-reader';
 import { PdfReader } from '@/readers/pdf-reader';
 import type { ReaderHandle } from '@/readers/types';
+import { startDownload } from '@/services/downloads';
 import { materializeLocalItem } from '@/services/local-source';
 import { syncReadingState } from '@/services/sync';
 import { useApp } from '@/state/app-provider';
+import { adjacentLibraryItem } from '@/utils/library-filter';
 import { goBackOrReplaceRoot } from '@/utils/navigation';
 
 export default function ReaderScreen() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width, height } = useWindowDimensions();
-  const { mode, ready, sources, refresh } = useApp();
+  const { mode, ready, items, sources, refresh } = useApp();
   const reader = useRef<ReaderHandle>(null);
   const [item, setItem] = useState<LibraryItem | null>(null);
   const [uri, setUri] = useState<string | null>(null);
@@ -32,6 +34,7 @@ export default function ReaderScreen() {
   const [bookmarked, setBookmarked] = useState(false);
   const [rtl, setRtl] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openingBook, setOpeningBook] = useState<string | null>(null);
   const latest = useRef<{ locator: ReadingLocator | null; percent: number }>({ locator: null, percent: 0 });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,41 +46,34 @@ export default function ReaderScreen() {
   const toggleControls = useCallback(() => setControls((value) => !value), []);
 
   useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      if (sliderFocused.current && event.key === 'ArrowLeft') seek(latest.current.percent - 0.05);
-      else if (sliderFocused.current && event.key === 'ArrowRight') seek(latest.current.percent + 0.05);
-      else if (sliderFocused.current && event.key === 'Home') seek(0);
-      else if (sliderFocused.current && event.key === 'End') seek(1);
-      else if (event.key === 'ArrowLeft') reader.current?.previous();
-      else if (event.key === 'ArrowRight') reader.current?.next();
-      else return;
-      event.preventDefault();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [seek]);
-
-  useEffect(() => {
     if (!id || !ready) return;
+    let active = true;
     void (async () => {
       try {
         setError(null);
         const loaded = await getLibraryItem(id);
         if (!loaded || !sourceMatchesLibraryMode(loaded.sourceKind, mode)) throw new Error(t('inactiveLibraryItem'));
-        const progress = await getProgress(id);
+        const [progress, bookmarks, direction, localUri] = await Promise.all([
+          getProgress(id),
+          listBookmarks(id),
+          getSetting(`direction:${id}`),
+          materializeLocalItem(loaded),
+        ]);
+        if (!active) return;
+        setControls(true);
         setItem(loaded);
         setLocator(progress?.locator ?? null);
         setPercent(progress?.percent ?? 0);
         latest.current = { locator: progress?.locator ?? null, percent: progress?.percent ?? 0 };
-        const bookmarks = await listBookmarks(id);
         bookmarkKeys.current = new Set(bookmarks.map((entry) => JSON.stringify(entry.locator)));
         setBookmarked(Boolean(progress && bookmarkKeys.current.has(JSON.stringify(progress.locator))));
-        setRtl((await getSetting(`direction:${id}`)) === 'rtl');
-        setUri(await materializeLocalItem(loaded));
-      } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+        setRtl(direction === 'rtl');
+        setUri(localUri);
+      } catch (caught) {
+        if (active) setError(caught instanceof Error ? caught.message : String(caught));
+      }
     })();
+    return () => { active = false; };
   }, [id, mode, ready, t]);
 
   const persist = useCallback(async () => {
@@ -133,16 +129,68 @@ export default function ReaderScreen() {
     if (!item) return;
     void updateItemMetadata(item.id, metadata).then(() => refresh());
   }, [item, refresh]);
+
+  const openAdjacentBook = useCallback(async (target: LibraryItem) => {
+    setOpeningBook(target.title);
+    try {
+      if (timer.current) clearTimeout(timer.current);
+      await persist();
+      if (target.sourceKind === 'drive' && !target.localUri) {
+        await startDownload(target);
+        await refresh();
+      }
+      router.replace({ pathname: '/reader', params: { id: target.id } });
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      if (Platform.OS === 'web') window.alert(`${t('error')}\n\n${message}`);
+      else Alert.alert(t('error'), message);
+    } finally {
+      setOpeningBook(null);
+    }
+  }, [persist, refresh, t]);
+
+  const movePage = useCallback((direction: -1 | 1) => {
+    if (!item || openingBook) return;
+    const moved = direction < 0 ? reader.current?.previous() : reader.current?.next();
+    if (moved !== false) return;
+    const target = adjacentLibraryItem(items, item.id, direction);
+    if (!target) return;
+    confirmAction(
+      t(direction < 0 ? 'openPreviousBookTitle' : 'openNextBookTitle'),
+      t(target.sourceKind === 'drive' && !target.localUri ? 'openAdjacentBookDownloadHint' : 'openAdjacentBookHint', { title: target.title }),
+      t('cancel'),
+      t('openBook'),
+      () => void openAdjacentBook(target),
+    );
+  }, [item, items, openAdjacentBook, openingBook, t]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (sliderFocused.current && event.key === 'ArrowLeft') seek(latest.current.percent - 0.05);
+      else if (sliderFocused.current && event.key === 'ArrowRight') seek(latest.current.percent + 0.05);
+      else if (sliderFocused.current && event.key === 'Home') seek(0);
+      else if (sliderFocused.current && event.key === 'End') seek(1);
+      else if (event.key === 'ArrowLeft') movePage(-1);
+      else if (event.key === 'ArrowRight') movePage(1);
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [movePage, seek]);
+
   const leaveReader = () => goBackOrReplaceRoot(router);
 
-  if (error || (item && !uri)) return <View accessibilityRole="alert" style={styles.error}>
+  if (error || (item?.id === id && !uri)) return <View accessibilityRole="alert" style={styles.error}>
     <AppText title style={styles.errorTitle}>{t('readerUnavailable')}</AppText>
     {error ? <AppText style={styles.errorBody}>{error}</AppText> : null}
     <ReaderControl accessibilityRole="button" accessibilityLabel={t('back')} onPress={leaveReader} style={styles.errorAction}>
       <AppText style={styles.controlText}>{t('back')}</AppText>
     </ReaderControl>
   </View>;
-  if (!item || !uri) return <View style={styles.container}><Loading /></View>;
+  if (!item || item.id !== id || !uri) return <View style={styles.container}><Loading /></View>;
 
   const percentValue = Math.round(Math.max(0, Math.min(1, percent)) * 100);
   const common = {
@@ -189,7 +237,7 @@ export default function ReaderScreen() {
           <AppText style={styles.percentText}>{percentValue}%</AppText>
         </View>
         <View style={styles.navigation}>
-          <ReaderControl accessibilityRole="button" accessibilityLabel={t('previous')} onPress={() => reader.current?.previous()} style={styles.control}>
+          <ReaderControl accessibilityRole="button" accessibilityLabel={t('previous')} onPress={() => movePage(-1)} style={styles.control}>
             <View style={styles.controlLabel}><SymbolView name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }} size={18} tintColor="#fff" />{!compactChrome ? <AppText style={styles.controlText}>{t('previous')}</AppText> : null}</View>
           </ReaderControl>
           {item.format === 'cbz' && <ReaderControl
@@ -200,12 +248,16 @@ export default function ReaderScreen() {
             style={styles.directionControl}>
             <AppText style={styles.controlText}>{rtl ? 'RTL' : 'LTR'}</AppText>
           </ReaderControl>}
-          <ReaderControl accessibilityRole="button" accessibilityLabel={t('next')} onPress={() => reader.current?.next()} style={styles.control}>
+          <ReaderControl accessibilityRole="button" accessibilityLabel={t('next')} onPress={() => movePage(1)} style={styles.control}>
             <View style={styles.controlLabel}>{!compactChrome ? <AppText style={styles.controlText}>{t('next')}</AppText> : null}<SymbolView name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} size={18} tintColor="#fff" /></View>
           </ReaderControl>
         </View>
       </View>
     </SafeAreaView>}
+    {openingBook ? <View accessible accessibilityRole="progressbar" accessibilityState={{ busy: true }} style={styles.openingOverlay}>
+      <ActivityIndicator accessible={false} color={palette.green300} size="large" />
+      <AppText style={styles.openingText}>{t('openingBook', { title: openingBook })}</AppText>
+    </View> : null}
   </View>;
 }
 
@@ -243,4 +295,6 @@ const styles = StyleSheet.create({
   controlLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   controlPressed: { opacity: 0.78 },
   controlFocused: { outlineColor: palette.green300, outlineOffset: 2, outlineStyle: 'solid', outlineWidth: 2 },
+  openingOverlay: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: 'rgba(8,11,18,0.86)' },
+  openingText: { color: '#fff', fontWeight: '700', textAlign: 'center', paddingHorizontal: 24 },
 });

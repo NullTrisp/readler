@@ -53,8 +53,16 @@ export const CbzReader = forwardRef<ReaderHandle, CbzProps>(function CbzReader(
     return () => { mounted = false; clearCbzCache(itemId); };
   }, [itemId, onMetadata, uri]);
   useImperativeHandle(ref, () => ({
-    previous: () => move(Math.max(0, index - 1), true),
-    next: () => move(Math.min(pages.length - 1, index + 1), true),
+    previous: () => {
+      if (!pages.length || index <= 0) return Boolean(!pages.length);
+      move(index - 1, true);
+      return true;
+    },
+    next: () => {
+      if (!pages.length || index >= pages.length - 1) return Boolean(!pages.length);
+      move(index + 1, true);
+      return true;
+    },
     seek: (progress) => move(pageFromProgress(progress, pages.length) - 1, false),
   }), [index, move, pages.length]);
   if (error) return <View style={styles.loading}><ActivityIndicator color="#FFB4AB" /></View>;
