@@ -37,9 +37,12 @@ export const CbzReader = forwardRef<ReaderHandle, CbzProps>(function CbzReader(
     onZoomChange={handleZoomChange}
   />, [handleZoomChange, height, onToggleControls, width]);
   const move = useCallback((next: number, animated: boolean) => {
+    if (!pages.length) return;
     setScrollEnabled(true);
     list.current?.scrollToIndex({ index: next, animated });
-  }, []);
+    setIndex(next);
+    onLocation({ kind: 'page', index: next + 1, total: pages.length }, (next + 1) / pages.length);
+  }, [onLocation, pages.length]);
   useEffect(() => {
     let mounted = true;
     void prepareCbz(uri, itemId).then(({ pages: value, metadata }) => {
