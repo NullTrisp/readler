@@ -20,6 +20,7 @@ export default function DriveScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const current = crumbs[crumbs.length - 1];
+  const buttonsDisabled = loading || importing;
 
   const loadFolders = useCallback(async (folderId: string, nextCrumbs?: Crumb[]) => {
     setLoading(true);
@@ -157,14 +158,14 @@ export default function DriveScreen() {
           {crumbs.length > 1 ? <Pressable
             accessibilityLabel={t('goToParentFolder')}
             accessibilityRole="button"
-            accessibilityState={{ busy: loading, disabled: loading }}
-            disabled={loading}
+            accessibilityState={{ busy: loading, disabled: buttonsDisabled }}
+            disabled={buttonsDisabled}
             onPress={() => void goBack()}
             style={({ pressed }) => [
               styles.backButton,
               { backgroundColor: colors.primaryContainer },
-              pressed && !loading && styles.pressed,
-              loading && styles.disabled,
+              pressed && !buttonsDisabled && styles.pressed,
+              buttonsDisabled && styles.disabled,
             ]}>
             <SymbolView
               accessible={false}
@@ -177,13 +178,13 @@ export default function DriveScreen() {
           </Pressable> : null}
           {current.id !== 'root' ? <View style={styles.chooseAction}>
             <Button
-              disabled={loading}
+              disabled={buttonsDisabled}
               icon={<SymbolView
                 accessible={false}
                 name={{ ios: 'checkmark', android: 'check', web: 'check' }}
                 size={20}
                 style={styles.symbol}
-                tintColor={loading ? colors.onDisabled : colors.onPrimary}
+                tintColor={buttonsDisabled ? colors.onDisabled : colors.onPrimary}
               />}
               loading={importing}
               onPress={() => void chooseFolder()}>
@@ -215,8 +216,10 @@ export default function DriveScreen() {
           accessibilityHint={t('openFolderHint')}
           accessibilityLabel={t('openFolderNamed', { name: item.name })}
           accessibilityRole="button"
+          accessibilityState={{ disabled: buttonsDisabled }}
+          disabled={buttonsDisabled}
           onPress={() => void openFolder(item)}
-          style={({ pressed }) => [styles.folderPressable, pressed && styles.pressed]}>
+          style={({ pressed }) => [styles.folderPressable, pressed && !buttonsDisabled && styles.pressed, buttonsDisabled && styles.disabled]}>
           <Card style={styles.folder}>
             <View style={[styles.folderIcon, { backgroundColor: colors.primaryContainer }]}>
               <SymbolView
