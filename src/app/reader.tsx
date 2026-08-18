@@ -40,6 +40,7 @@ export default function ReaderScreen() {
   const bookmarkKeys = useRef(new Set<string>());
   const compactChrome = width < 380 || height < 500;
   const seek = useCallback((value: number) => reader.current?.seek(Math.max(0, Math.min(1, value))), []);
+  const toggleControls = useCallback(() => setControls((value) => !value), []);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -148,12 +149,12 @@ export default function ReaderScreen() {
     uri,
     initialLocator: locator,
     onLocation,
-    onToggleControls: () => setControls((value) => !value),
+    onToggleControls: toggleControls,
     onMetadata,
   };
   return <View style={styles.container}><StatusBar hidden={!controls} style="light" />
     {item.format === 'cbz' ? <CbzReader ref={reader} {...common} itemId={item.id} rtl={rtl} /> : item.format === 'epub' ? <EpubReader ref={reader} {...common} /> : <PdfReader ref={reader} {...common} />}
-    {controls && <SafeAreaView pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.chrome]}>
+    {controls && <SafeAreaView style={[StyleSheet.absoluteFill, styles.chrome]}>
       <View style={styles.top}><ReaderControl accessibilityRole="button" accessibilityLabel={t('back')} onPress={leaveReader} style={styles.circle}>
         <SymbolView name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }} size={22} tintColor="#fff" />
       </ReaderControl><AppText style={styles.readerTitle} numberOfLines={1}>{item.title}</AppText><ReaderControl
@@ -225,7 +226,7 @@ const styles = StyleSheet.create({
   errorTitle: { color: '#fff', textAlign: 'center' },
   errorBody: { color: '#C5D0C6', maxWidth: 520, textAlign: 'center' },
   errorAction: { minWidth: 160, minHeight: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.green800, paddingHorizontal: 18 },
-  chrome: { padding: 10 },
+  chrome: { padding: 10, pointerEvents: 'box-none' },
   top: { width: '100%', maxWidth: 960, alignSelf: 'center', padding: 8, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(8,11,18,0.92)' },
   readerTitle: { color: '#fff', flex: 1, fontWeight: '700' },
   circle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#252b38' },

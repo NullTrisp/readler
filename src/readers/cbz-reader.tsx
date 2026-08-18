@@ -1,5 +1,5 @@
 import { Directory, Paths } from 'expo-file-system';
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -29,6 +29,13 @@ export const CbzReader = forwardRef<ReaderHandle, CbzProps>(function CbzReader(
   const [index, setIndex] = useState(initialLocator?.kind === 'page' ? Math.max(0, initialLocator.index - 1) : 0);
   const pages = useMemo(() => rtl ? [...naturalPages].reverse() : naturalPages, [naturalPages, rtl]);
   const handleZoomChange = useCallback((zoomed: boolean) => setScrollEnabled(!zoomed), []);
+  const renderPage = useCallback(({ item }: { item: string }) => <ZoomablePage
+    uri={item}
+    width={width}
+    height={height}
+    onTap={onToggleControls}
+    onZoomChange={handleZoomChange}
+  />, [handleZoomChange, height, onToggleControls, width]);
   const move = useCallback((next: number, animated: boolean) => {
     setScrollEnabled(true);
     list.current?.scrollToIndex({ index: next, animated });
@@ -55,7 +62,7 @@ export const CbzReader = forwardRef<ReaderHandle, CbzProps>(function CbzReader(
   return <FlatList ref={list} data={pages} horizontal pagingEnabled scrollEnabled={scrollEnabled} initialScrollIndex={Math.min(index, pages.length - 1)}
     keyExtractor={(page) => page} getItemLayout={(_, itemIndex) => ({ length: width, offset: width * itemIndex, index: itemIndex })}
     onMomentumScrollEnd={(event) => { const next = Math.round(event.nativeEvent.contentOffset.x / width); setIndex(next); onLocation({ kind: 'page', index: next + 1, total: pages.length }, (next + 1) / pages.length); }}
-    renderItem={({ item }) => <ZoomablePage uri={item} width={width} height={height} onTap={onToggleControls} onZoomChange={handleZoomChange} />} />;
+    renderItem={renderPage} />;
 });
 
 async function prepareCbz(uri: string, itemId: string) {
@@ -97,7 +104,7 @@ async function readComicInfo(root: Directory) {
   return parseComicInfo(await comicInfo.text());
 }
 
-function ZoomablePage({ uri, width, height, onTap, onZoomChange }: { uri: string; width: number; height: number; onTap(): void; onZoomChange(zoomed: boolean): void }) {
+const ZoomablePage = memo(function ZoomablePage({ uri, width, height, onTap, onZoomChange }: { uri: string; width: number; height: number; onTap(): void; onZoomChange(zoomed: boolean): void }) {
   const [zoomed, setZoomed] = useState(false);
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -157,6 +164,6 @@ function ZoomablePage({ uri, width, height, onTap, onZoomChange }: { uri: string
   const gesture = Gesture.Simultaneous(pinch, zoomed ? Gesture.Exclusive(pan, tap) : tap);
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }] }));
   return <GestureDetector gesture={gesture}><View style={[styles.page, { width }]}><Animated.View style={[styles.imageWrap, style]}><Image source={{ uri }} style={styles.image} contentFit="contain" /></Animated.View></View></GestureDetector>;
-}
+});
 
 const styles = StyleSheet.create({ loading: { flex: 1, backgroundColor: '#080b12', alignItems: 'center', justifyContent: 'center' }, page: { flex: 1, backgroundColor: '#080b12', overflow: 'hidden' }, imageWrap: { flex: 1 }, image: { flex: 1 } });
