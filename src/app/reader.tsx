@@ -229,8 +229,8 @@ export default function ReaderScreen() {
             onBlur={() => { sliderFocused.current = false; }}
             onFocus={() => { sliderFocused.current = true; }}
             onLayout={(event) => { trackWidth.current = event.nativeEvent.layout.width; }}
-            onPress={(event) => seek(event.nativeEvent.locationX / trackWidth.current)}
-            onTouchMove={(event) => seek(event.nativeEvent.locationX / trackWidth.current)}
+            onPressIn={(event) => seek(event.nativeEvent.locationX / trackWidth.current)}
+            onPressMove={(event) => seek(event.nativeEvent.locationX / trackWidth.current)}
             style={styles.progressHitArea}>
             <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${percentValue}%` }]} /></View>
           </ReaderControl>
