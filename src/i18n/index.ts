@@ -1,12 +1,12 @@
-import i18n from 'i18next';
 import { getLocales } from 'expo-localization';
+import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 const resources = {
   en: {
     translation: {
       appName: 'Readler', library: 'Library', downloads: 'Downloads', settings: 'Settings',
-      search: 'Search your library', all: 'All', unread: 'Unread', reading: 'Reading', finished: 'Finished',
+      search: 'Search your library', all: 'All', format: 'Format', unread: 'Unread', reading: 'Reading', finished: 'Finished',
       folders: 'Folders', positionSlider: 'Reading position',
       emptyLibrary: 'Your library is empty', emptyLibraryHint: 'Choose local files or Google Drive whenever you are ready.',
       emptyLocalLibraryHint: 'Import local files or link a folder to start reading.',
@@ -46,7 +46,7 @@ const resources = {
       sourceLastScan: '{{type}} · Last scan {{date}}',
       onboardingTitle: 'Your books, your way', onboardingBody: 'Read CBZ, EPUB and PDF from Drive or your device. Your place and bookmarks stay with you.',
       startLocal: 'Start with local files', startDrive: 'Start with Google Drive', skip: 'Explore empty library',
-      books: 'Books', filters: 'Filters', activeFilters: 'Filters · {{count}}',
+      books: 'Books', filters: 'Filters and sorting', activeFilters: 'Filters · {{count}}', cycleFormat: 'Show the next book format',
       filterAndSort: 'Filter and sort', closeFilters: 'Close filters', resetFilters: 'Reset filters', done: 'Done',
       sortBy: 'Sort by', sortCurrent: 'Sort: {{value}}', sortTitle: 'Title', sortAuthor: 'Author',
       sortSeries: 'Series', sortModified: 'Last modified', sortProgress: 'Reading progress', readingStatus: 'Reading status', series: 'Series',
@@ -64,7 +64,7 @@ const resources = {
   es: {
     translation: {
       appName: 'Readler', library: 'Biblioteca', downloads: 'Descargas', settings: 'Ajustes',
-      search: 'Buscar en tu biblioteca', all: 'Todo', unread: 'Sin leer', reading: 'Leyendo', finished: 'Terminado',
+      search: 'Buscar en tu biblioteca', all: 'Todo', format: 'Formato', unread: 'Sin leer', reading: 'Leyendo', finished: 'Terminado',
       folders: 'Carpetas', positionSlider: 'Posición de lectura',
       emptyLibrary: 'Tu biblioteca está vacía', emptyLibraryHint: 'Elige archivos locales o Google Drive cuando quieras.',
       emptyLocalLibraryHint: 'Importa archivos locales o enlaza una carpeta para empezar a leer.',
@@ -104,7 +104,7 @@ const resources = {
       sourceLastScan: '{{type}} · Último escaneo: {{date}}',
       onboardingTitle: 'Tus libros, a tu manera', onboardingBody: 'Lee CBZ, EPUB y PDF desde Drive o tu dispositivo. Tu posición y marcadores viajan contigo.',
       startLocal: 'Empezar con archivos locales', startDrive: 'Empezar con Google Drive', skip: 'Explorar biblioteca vacía',
-      books: 'Libros', filters: 'Filtros', activeFilters: 'Filtros · {{count}}',
+      books: 'Libros', filters: 'Filtros y orden', activeFilters: 'Filtros · {{count}}', cycleFormat: 'Mostrar el siguiente formato de libro',
       filterAndSort: 'Filtrar y ordenar', closeFilters: 'Cerrar filtros', resetFilters: 'Restablecer filtros', done: 'Listo',
       sortBy: 'Ordenar por', sortCurrent: 'Orden: {{value}}', sortTitle: 'Título', sortAuthor: 'Autor',
       sortSeries: 'Serie', sortModified: 'Última modificación', sortProgress: 'Progreso de lectura', readingStatus: 'Estado de lectura', series: 'Serie',

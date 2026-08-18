@@ -102,7 +102,6 @@ export default function LibraryScreen() {
 
   const advancedFilterCount = Number(status !== 'all') + Number(series !== 'all') + Number(language !== 'all');
   const anyFilterActive = format !== 'all' || advancedFilterCount > 0;
-  const allActive = !anyFilterActive && activeLocation.sourceId === null && activeLocation.path === '';
   const breadcrumbParts = useMemo(() => {
     if (!activeLocation.sourceId) return [];
     return libraryBreadcrumbs(activeLocation).filter((part) => part.path.length > 0);
@@ -228,22 +227,19 @@ export default function LibraryScreen() {
   const listHeader = <LibraryHeader
     query={query}
     format={format}
-    allActive={allActive}
     advancedFilterCount={advancedFilterCount}
     error={error}
     mode={mode}
     downloadNotice={downloadNotice}
     location={activeLocation}
     breadcrumbParts={breadcrumbParts}
-    sort={sort}
     searching={searching}
     visibleBookCount={visibleBooks.length}
     visibleFolders={visibleFolders}
     sources={sources}
     folderWidth={folderWidth}
     onQueryChange={setQuery}
-    onShowAll={showAll}
-    onFormatChange={(value) => setFormat((current) => current === value ? 'all' : value)}
+    onFormatChange={(value) => value === 'all' ? showAll() : setFormat(value)}
     onOpenFilters={() => setFiltersOpen(true)}
     onRetry={() => { clearError(); void sync().catch(() => undefined); }}
     onClearError={clearError}

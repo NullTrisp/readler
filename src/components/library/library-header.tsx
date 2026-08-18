@@ -7,7 +7,6 @@ import { FolderCard } from '@/components/library/library-cards';
 import {
   GRID_GAP,
   ROOT_LOCATION,
-  sortLabel,
   type DownloadNotice,
 } from '@/components/library/library-screen';
 import { AppText, useReadlerTheme } from '@/components/readler-ui';
@@ -16,29 +15,32 @@ import type {
   LibraryBreadcrumb,
   LibraryFolderNode,
   LibraryLocation,
-  LibrarySort,
 } from '@/utils/library-filter';
 
 type IconName = SymbolViewProps['name'];
 
+const NEXT_FORMAT: Record<ContentFormat | 'all', ContentFormat | 'all'> = {
+  all: 'cbz',
+  cbz: 'epub',
+  epub: 'pdf',
+  pdf: 'all',
+};
+
 export function LibraryHeader({
   query,
   format,
-  allActive,
   advancedFilterCount,
   error,
   mode,
   downloadNotice,
   location,
   breadcrumbParts,
-  sort,
   searching,
   visibleBookCount,
   visibleFolders,
   sources,
   folderWidth,
   onQueryChange,
-  onShowAll,
   onFormatChange,
   onOpenFilters,
   onRetry,
@@ -48,22 +50,19 @@ export function LibraryHeader({
 }: {
   query: string;
   format: ContentFormat | 'all';
-  allActive: boolean;
   advancedFilterCount: number;
   error: string | null;
   mode: LibraryMode | null;
   downloadNotice: DownloadNotice | null;
   location: LibraryLocation;
   breadcrumbParts: LibraryBreadcrumb[];
-  sort: LibrarySort;
   searching: boolean;
   visibleBookCount: number;
   visibleFolders: LibraryFolderNode[];
   sources: ContentSourceRecord[];
   folderWidth: number;
   onQueryChange(value: string): void;
-  onShowAll(): void;
-  onFormatChange(value: ContentFormat): void;
+  onFormatChange(value: ContentFormat | 'all'): void;
   onOpenFilters(): void;
   onRetry(): void;
   onClearError(): void;
@@ -81,15 +80,13 @@ export function LibraryHeader({
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.chips}
       accessibilityRole="toolbar">
-      <Chip active={allActive} label={t('all')} onPress={onShowAll} />
-      {(['cbz', 'epub', 'pdf'] as const).map((value) => (
-        <Chip
-          key={value}
-          active={format === value}
-          label={value.toUpperCase()}
-          onPress={() => onFormatChange(value)}
-        />
-      ))}
+      <Chip
+        active={format !== 'all'}
+        accessibilityHint={t('cycleFormat')}
+        icon={{ ios: 'arrow.triangle.2.circlepath', android: 'sync', web: 'sync' }}
+        label={format === 'all' ? t('format') : format.toUpperCase()}
+        onPress={() => onFormatChange(NEXT_FORMAT[format])}
+      />
       <Chip
         active={advancedFilterCount > 0}
         icon={{ ios: 'line.3.horizontal.decrease', android: 'filter_list', web: 'filter_list' }}
@@ -139,17 +136,6 @@ export function LibraryHeader({
         parts={breadcrumbParts}
         onNavigate={onNavigate}
       />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('sortCurrent', { value: sortLabel(sort, t) })}
-        onPress={onOpenFilters}
-        style={({ pressed }) => [
-          styles.sortButton,
-          { backgroundColor: colors.surfaceVariant, borderColor: pressed ? colors.outline : colors.outlineVariant },
-        ]}>
-        <Icon name={{ ios: 'arrow.up.arrow.down', android: 'sort', web: 'sort' }} color={colors.onSurfaceVariant} size={18} />
-        <AppText muted numberOfLines={1} style={styles.sortLabel}>{sortLabel(sort, t)}</AppText>
-      </Pressable>
     </View>
 
     <AppText accessibilityLiveRegion="polite" muted style={styles.resultCount}>
@@ -220,10 +206,11 @@ function SearchField({ value, onChange }: { value: string; onChange(value: strin
   </View>;
 }
 
-function Chip({ active, label, icon, onPress }: {
+function Chip({ active, label, icon, accessibilityHint, onPress }: {
   active: boolean;
   label: string;
   icon?: IconName;
+  accessibilityHint?: string;
   onPress(): void;
 }) {
   const colors = useReadlerTheme();
@@ -231,6 +218,7 @@ function Chip({ active, label, icon, onPress }: {
     accessibilityRole="button"
     accessibilityState={{ selected: active }}
     accessibilityLabel={label}
+    accessibilityHint={accessibilityHint}
     onPress={onPress}
     style={({ pressed }) => [
       styles.chip,
@@ -339,18 +327,7 @@ const styles = StyleSheet.create({
   breadcrumb: { minHeight: 44, alignItems: 'center' },
   crumbGroup: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   crumbButton: { minHeight: 44, maxWidth: 150, paddingHorizontal: 5, justifyContent: 'center' },
-  currentCrumb: { maxWidth: 180, paddingHorizontal: 5, fontWeight: '700' },
-  sortButton: {
-    maxWidth: 150,
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  sortLabel: { fontWeight: '600', flexShrink: 1 },
+  currentCrumb: { maxWidth: 300, paddingHorizontal: 5, fontWeight: '700' },
   resultCount: { marginTop: 4 },
   section: { marginTop: 22 },
   sectionTitle: { fontSize: 18, lineHeight: 24, fontWeight: '700' },
