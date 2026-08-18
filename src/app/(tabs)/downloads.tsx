@@ -4,6 +4,7 @@ import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { AppText, Button, Card, EmptyState, Screen, confirmAction, useReadlerTheme } from '@/components/readler-ui';
+import { useNoticeTimeout } from '@/hooks/use-notice-timeout';
 import { cancelDownload, pauseDownload, removeDownload, resumeDownload, startDownload } from '@/services/downloads';
 import { useApp } from '@/state/app-provider';
 
@@ -14,6 +15,7 @@ export default function DownloadsScreen() {
   // ponytail: one visible download action at a time; use per-item state if concurrent controls become necessary.
   const [busy, setBusy] = useState<{ id: string; action: 'remove' | 'retry' | 'pause' | 'resume' | 'cancel' } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  useNoticeTimeout(actionError, setActionError);
   if (mode === 'local') return <Redirect href="/(tabs)" />;
   const downloads = items.filter((item) => item.sourceKind === 'drive' && item.downloadStatus !== 'none');
   const runAction = async (id: string, action: NonNullable<typeof busy>['action'], task: () => Promise<unknown>) => {

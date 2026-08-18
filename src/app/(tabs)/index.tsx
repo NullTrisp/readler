@@ -17,6 +17,7 @@ import {
 import { Button, Screen, useReadlerTheme } from '@/components/readler-ui';
 import { getDownload } from '@/data/repository';
 import { downloadIsReady, type ContentFormat, type LibraryItem, type ReadingStatus } from '@/domain/models';
+import { useNoticeTimeout } from '@/hooks/use-notice-timeout';
 import { startDownload } from '@/services/downloads';
 import { canLinkFolder, useApp } from '@/state/app-provider';
 import {
@@ -57,6 +58,7 @@ export default function LibraryScreen() {
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<string[]>([]);
   const [downloadNotice, setDownloadNotice] = useState<DownloadNotice | null>(null);
+  useNoticeTimeout(downloadNotice, setDownloadNotice);
   const opening = useRef(false);
   const pendingOpenId = useRef<string | null>(null);
   const activeLocation = location.sourceId && !sources.some((source) => source.id === location.sourceId) ? ROOT_LOCATION : location;

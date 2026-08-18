@@ -5,6 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-
 import { useTranslation } from 'react-i18next';
 
 import { AppText, Button, Card, EmptyState, Screen, useReadlerTheme } from '@/components/readler-ui';
+import { useNoticeTimeout } from '@/hooks/use-notice-timeout';
 import { isGoogleConfigured, listDriveFolders, signInToDrive, type DriveFolder, type DriveUser } from '@/services/drive';
 import { useApp } from '@/state/app-provider';
 
@@ -19,6 +20,7 @@ export default function DriveScreen() {
   const [crumbs, setCrumbs] = useState<Crumb[]>([{ id: 'root', name: t('myDrive') }]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useNoticeTimeout(error, setError);
   const current = crumbs[crumbs.length - 1];
   const buttonsDisabled = loading || importing;
 

@@ -19,6 +19,7 @@ import {
   type LibraryItem,
   type LibraryMode,
 } from '@/domain/models';
+import { useNoticeTimeout } from '@/hooks/use-notice-timeout';
 import { connectDriveFolder, scanDriveSource, signOutDrive, type DriveFolder } from '@/services/drive';
 import { pauseDownload } from '@/services/downloads';
 import { disconnectLocalSource, importLocalFiles, linkAndroidFolder, materializeLocalItem, scanLocalSource } from '@/services/local-source';
@@ -58,6 +59,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useNoticeTimeout(error, setError);
   const [mode, setMode] = useState<LibraryMode | null>(null);
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [sources, setSources] = useState<ContentSourceRecord[]>([]);
