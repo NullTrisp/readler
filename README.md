@@ -53,7 +53,8 @@ See [Google Drive setup](docs/GOOGLE_DRIVE_SETUP.md) and the [privacy checklist]
 
 
 ## TODO
-[] Real notifications for downloads
-[] Test in IOS env
-[] Long press book to manage it
-[] Increase page flip smoothness
+- Real notifications for downloads
+- Test in IOS env
+- Long press book to manage it
+- Increase page flip smoothness
+- Add app icon 
