@@ -1,11 +1,17 @@
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { Platform } from 'react-native';
 
-import { isGoogleConfigured } from '../drive-auth';
+import { getDriveAccessToken, isGoogleConfigured } from '../drive-auth';
 
 jest.mock('@react-native-google-signin/google-signin', () => ({
-  GoogleSignin: {},
+  GoogleSignin: {
+    configure: jest.fn(),
+    getTokens: jest.fn(),
+  },
   isSuccessResponse: jest.fn(),
 }));
+
+const mockGetTokens = GoogleSignin.getTokens as jest.Mock;
 
 test('uses the Android client ID instead of the web client ID on Android', () => {
   const platform = Platform.OS;
@@ -27,4 +33,20 @@ test('uses the Android client ID instead of the web client ID on Android', () =>
     if (webClientId === undefined) delete process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
     else process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = webClientId;
   }
+});
+
+test('shares an in-flight token request', async () => {
+  let resolve!: (value: { accessToken: string }) => void;
+  mockGetTokens.mockReturnValueOnce(new Promise((nextResolve) => {
+    resolve = nextResolve;
+  }));
+
+  const first = getDriveAccessToken();
+  const second = getDriveAccessToken();
+
+  expect(mockGetTokens).toHaveBeenCalledTimes(1);
+  resolve({ accessToken: 'token' });
+
+  await expect(first).resolves.toBe('token');
+  await expect(second).resolves.toBe('token');
 });

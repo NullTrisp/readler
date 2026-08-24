@@ -11,6 +11,7 @@ export interface DriveUser {
 }
 
 let configured = false;
+let pendingToken: Promise<string> | null = null;
 
 function configureGoogle() {
   if (configured) return;
@@ -50,5 +51,13 @@ export async function signOutDrive(revoke = false) {
 
 export async function getDriveAccessToken() {
   configureGoogle();
-  return (await GoogleSignin.getTokens()).accessToken;
+  if (pendingToken) return pendingToken;
+
+  const tokenPromise = GoogleSignin.getTokens()
+    .then(({ accessToken }) => accessToken)
+    .finally(() => {
+      pendingToken = null;
+    });
+  pendingToken = tokenPromise;
+  return tokenPromise;
 }
