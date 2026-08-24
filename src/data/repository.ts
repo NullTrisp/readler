@@ -309,7 +309,10 @@ export async function updateItemMetadata(
   const has = <Key extends keyof typeof metadata>(key: Key) => Object.prototype.hasOwnProperty.call(metadata, key);
   const set = (column: string, value: string | number | null) => { updates.push(`${column}=?`); args.push(value); };
 
-  if (typeof metadata.title === 'string' && metadata.title.trim()) set('title', metadata.title.trim());
+  if (typeof metadata.title === 'string' && metadata.title.trim()) {
+    updates.push("title=CASE WHEN format='cbz' THEN title ELSE ? END");
+    args.push(metadata.title.trim());
+  }
   if (has('author')) set('author', metadata.author?.trim() || null);
   if (has('series')) set('series', metadata.series?.trim() || null);
   if (has('seriesNumber')) set('series_number', metadata.seriesNumber?.trim() || null);

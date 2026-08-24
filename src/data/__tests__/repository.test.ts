@@ -125,6 +125,14 @@ describe('metadata updates and search', () => {
     expect(database.runAsync.mock.calls[0][1]).toBe(1);
   });
 
+  it('keeps a CBZ filename-derived title when applying embedded metadata', async () => {
+    await updateItemMetadata('item-1', { title: 'Embedded title', author: 'Writer' });
+    const [sql, ...args] = database.runAsync.mock.calls[0];
+    expect(sql).toContain("title=CASE WHEN format='cbz' THEN title ELSE ? END");
+    expect(sql).toContain('author=?');
+    expect(args.slice(0, 2)).toEqual(['Embedded title', 'Writer']);
+  });
+
   it('can clear a stale cover while recording the extraction version', async () => {
     await updateItemMetadata('item-1', { coverUri: null, coverExtractionVersion: 1 });
     const [sql, ...args] = database.runAsync.mock.calls[0];
