@@ -1,7 +1,7 @@
 import { Directory, Paths } from 'expo-file-system';
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { ActivityIndicator, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { FlatList, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { getUncompressedSize, isPasswordProtected, unzip } from 'react-native-zip-archive';
@@ -70,7 +70,7 @@ export const CbzReader = forwardRef<ReaderHandle, CbzProps>(function CbzReader(
   }), [index, move, pages.length]);
   if (error) return <View style={styles.loading}><ActivityIndicator color="#FFB4AB" /></View>;
   if (!pages.length) return <View style={styles.loading}><ActivityIndicator color="#81C784" /></View>;
-  return <FlatList ref={list} data={pages} horizontal pagingEnabled showsHorizontalScrollIndicator={false} scrollEnabled={scrollEnabled} initialScrollIndex={Math.min(index, pages.length - 1)}
+  return <FlatList ref={list} data={pages} horizontal snapToInterval={width} disableIntervalMomentum decelerationRate="fast" showsHorizontalScrollIndicator={false} scrollEnabled={scrollEnabled} initialScrollIndex={Math.min(index, pages.length - 1)}
     initialNumToRender={1} maxToRenderPerBatch={2} windowSize={3}
     keyExtractor={(page) => page} getItemLayout={(_, itemIndex) => ({ length: width, offset: width * itemIndex, index: itemIndex })}
     onMomentumScrollEnd={(event) => { const next = Math.round(event.nativeEvent.contentOffset.x / width); setIndex(next); onLocation({ kind: 'page', index: next + 1, total: pages.length }, (next + 1) / pages.length); }}
