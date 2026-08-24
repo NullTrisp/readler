@@ -63,7 +63,10 @@ export default function LibraryScreen() {
   const pendingOpenId = useRef<string | null>(null);
   const activeLocation = location.sourceId && !sources.some((source) => source.id === location.sourceId) ? ROOT_LOCATION : location;
 
-  useFocusEffect(useCallback(() => () => { pendingOpenId.current = null; }, []));
+  useFocusEffect(useCallback(() => {
+    void refresh().catch(() => undefined);
+    return () => { pendingOpenId.current = null; };
+  }, [refresh]));
 
   const columns = width >= 1400 ? 6 : width >= 1000 ? 4 : width >= 700 ? 3 : 2;
   const contentWidth = Math.min(width, CONTENT_MAX_WIDTH);
