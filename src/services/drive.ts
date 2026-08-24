@@ -134,13 +134,22 @@ async function walkDrive(folderId: string, path: string, items: ScanItem[]) {
 }
 
 export async function listAppDataFiles() {
-  const query = new URLSearchParams({
-    spaces: 'appDataFolder',
-    q: "name contains 'state-' and trashed=false",
-    fields: 'files(id,name,modifiedTime)',
-    pageSize: '1000',
-  });
-  return driveFetch<{ files: { id: string; name: string; modifiedTime: string }[] }>(`/files?${query}`);
+  const files: { id: string; name: string; modifiedTime: string }[] = [];
+  let pageToken: string | undefined;
+  do {
+    const query = new URLSearchParams({
+      spaces: 'appDataFolder',
+      q: "'appDataFolder' in parents and name contains 'state-' and trashed=false",
+      supportsAllDrives: 'true',
+      fields: 'nextPageToken,files(id,name,modifiedTime)',
+      pageSize: '1000',
+    });
+    if (pageToken) query.set('pageToken', pageToken);
+    const page = await driveFetch<{ files: typeof files; nextPageToken?: string }>(`/files?${query}`);
+    files.push(...page.files);
+    pageToken = page.nextPageToken;
+  } while (pageToken);
+  return { files };
 }
 
 export async function downloadDriveJson(fileId: string) {
@@ -172,7 +181,7 @@ export async function uploadDriveState(name: string, envelope: SyncEnvelopeV1, e
 
 export async function deleteAppDataFile(fileId: string) {
   const token = await getDriveAccessToken();
-  const response = await fetch(`${DRIVE_API}/files/${fileId}`, {
+  const response = await fetch(`${DRIVE_API}/files/${fileId}?supportsAllDrives=true`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });

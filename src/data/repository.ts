@@ -478,6 +478,15 @@ export async function listDriveBookmarks(includeDeleted = true) {
   );
 }
 
+export async function deleteDriveReadingState() {
+  const database = await getDatabase();
+  const driveItems = "SELECT i.id FROM library_items i JOIN sources s ON s.id=i.source_id WHERE s.kind='drive'";
+  await database.withTransactionAsync(async () => {
+    await database.runAsync(`DELETE FROM bookmarks WHERE item_id IN (${driveItems})`);
+    await database.runAsync(`DELETE FROM reading_progress WHERE item_id IN (${driveItems})`);
+  });
+}
+
 export async function toggleBookmark(item: LibraryItem, locator: ReadingLocator) {
   const database = await getDatabase();
   const installationId = await getInstallationId();

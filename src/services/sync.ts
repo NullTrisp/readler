@@ -1,5 +1,5 @@
-import type { ContentSourceRecord, SyncEnvelopeV1 } from '@/domain/models';
 import {
+  deleteDriveReadingState,
   getInstallationId,
   getSetting,
   listDriveBookmarks,
@@ -8,6 +8,7 @@ import {
   upsertRemoteBookmark,
   upsertRemoteProgress,
 } from '@/data/repository';
+import type { ContentSourceRecord, SyncEnvelopeV1 } from '@/domain/models';
 import {
   deleteAppDataFile,
   downloadDriveJson,
@@ -57,6 +58,14 @@ async function runSync(source: ContentSourceRecord) {
 }
 
 export async function deleteAllSynchronizedData() {
+  await activeSync?.catch(() => undefined);
   const remote = await listAppDataFiles();
   await Promise.all(remote.files.map((file) => deleteAppDataFile(file.id)));
+  return remote.files.length;
+}
+
+export async function deleteLocalAndSynchronizedData() {
+  const deletedSnapshots = await deleteAllSynchronizedData();
+  await deleteDriveReadingState();
+  return deletedSnapshots;
 }

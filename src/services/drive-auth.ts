@@ -1,4 +1,4 @@
-import { GoogleSignin, isSuccessResponse } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, isErrorWithCode, isSuccessResponse, statusCodes } from '@react-native-google-signin/google-signin';
 import { Platform } from 'react-native';
 
 export const DRIVE_SCOPES = [
@@ -45,8 +45,27 @@ export async function restoreDriveSession(): Promise<DriveUser | null> {
 
 export async function signOutDrive(revoke = false) {
   configureGoogle();
-  if (revoke) await GoogleSignin.revokeAccess();
-  else await GoogleSignin.signOut();
+  await pendingToken?.catch(() => undefined);
+  if (!revoke) {
+    await GoogleSignin.signOut();
+    return true;
+  }
+
+  if (!GoogleSignin.getCurrentUser()) {
+    const response = GoogleSignin.hasPreviousSignIn()
+      ? await GoogleSignin.signInSilently()
+      : await GoogleSignin.signIn();
+    if (response.type !== 'success') return false;
+  }
+  try {
+    await GoogleSignin.revokeAccess();
+  } catch (caught) {
+    if (!isErrorWithCode(caught) || caught.code !== statusCodes.SIGN_IN_REQUIRED) throw caught;
+    const response = await GoogleSignin.signIn();
+    if (!isSuccessResponse(response)) return false;
+    await GoogleSignin.revokeAccess();
+  }
+  return true;
 }
 
 export async function getDriveAccessToken() {

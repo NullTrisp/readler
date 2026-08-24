@@ -1,17 +1,27 @@
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { Platform } from 'react-native';
 
-import { getDriveAccessToken, isGoogleConfigured } from '../drive-auth';
+import { getDriveAccessToken, isGoogleConfigured, signOutDrive } from '../drive-auth';
 
 jest.mock('@react-native-google-signin/google-signin', () => ({
   GoogleSignin: {
     configure: jest.fn(),
+    getCurrentUser: jest.fn(),
     getTokens: jest.fn(),
+    hasPreviousSignIn: jest.fn(),
+    revokeAccess: jest.fn(),
+    signIn: jest.fn(),
+    signInSilently: jest.fn(),
+    signOut: jest.fn(),
   },
-  isSuccessResponse: jest.fn(),
+  isErrorWithCode: jest.fn((error) => Boolean(error && typeof error === 'object' && 'code' in error)),
+  isSuccessResponse: jest.fn((response) => response?.type === 'success'),
+  statusCodes: { SIGN_IN_REQUIRED: 'SIGN_IN_REQUIRED' },
 }));
 
 const mockGetTokens = GoogleSignin.getTokens as jest.Mock;
+
+beforeEach(() => jest.clearAllMocks());
 
 test('uses the Android client ID instead of the web client ID on Android', () => {
   const platform = Platform.OS;
@@ -49,4 +59,28 @@ test('shares an in-flight token request', async () => {
 
   await expect(first).resolves.toBe('token');
   await expect(second).resolves.toBe('token');
+});
+
+test('signs in before revoking when the local Google session was signed out', async () => {
+  (GoogleSignin.getCurrentUser as jest.Mock).mockReturnValue(null);
+  (GoogleSignin.hasPreviousSignIn as jest.Mock).mockReturnValue(false);
+  (GoogleSignin.signIn as jest.Mock).mockResolvedValue({ type: 'success', data: { user: { id: 'account' } } });
+
+  await expect(signOutDrive(true)).resolves.toBe(true);
+
+  expect(GoogleSignin.signIn).toHaveBeenCalledTimes(1);
+  expect(GoogleSignin.revokeAccess).toHaveBeenCalledTimes(1);
+});
+
+test('reauthenticates and retries when Google reports SIGN_IN_REQUIRED during revoke', async () => {
+  (GoogleSignin.getCurrentUser as jest.Mock).mockReturnValue({ user: { id: 'stale-account' } });
+  (GoogleSignin.revokeAccess as jest.Mock)
+    .mockRejectedValueOnce({ code: 'SIGN_IN_REQUIRED' })
+    .mockResolvedValueOnce(null);
+  (GoogleSignin.signIn as jest.Mock).mockResolvedValue({ type: 'success', data: { user: { id: 'account' } } });
+
+  await expect(signOutDrive(true)).resolves.toBe(true);
+
+  expect(GoogleSignin.signIn).toHaveBeenCalledTimes(1);
+  expect(GoogleSignin.revokeAccess).toHaveBeenCalledTimes(2);
 });

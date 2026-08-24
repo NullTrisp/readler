@@ -1,4 +1,4 @@
-import { uploadDriveState } from '../drive';
+import { deleteAppDataFile, listAppDataFiles, uploadDriveState } from '../drive';
 
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'boundary' }));
 jest.mock('@/data/repository', () => ({ replaceSourceItems: jest.fn(), saveSource: jest.fn() }));
@@ -33,6 +33,45 @@ test('recreates a sync snapshot when its cached Drive file ID is stale', async (
       method: 'POST',
       body: expect.stringContaining('"parents":["appDataFolder"]'),
     }));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('deletes a synchronized snapshot with shared-drive support enabled', async () => {
+  const fetch = jest.fn().mockResolvedValue({ ok: true, status: 204 });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
+
+  try {
+    await deleteAppDataFile('snapshot-id');
+    expect(fetch).toHaveBeenCalledWith(
+      'https://www.googleapis.com/drive/v3/files/snapshot-id?supportsAllDrives=true',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('lists Readler snapshots from the app data folder', async () => {
+  const fetch = jest.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ files: [{ id: 'one', name: 'state-one.json', modifiedTime: 'now' }], nextPageToken: 'next' }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ files: [{ id: 'two', name: 'state-two.json', modifiedTime: 'now' }] }) });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
+
+  try {
+    await expect(listAppDataFiles()).resolves.toEqual({ files: [
+      { id: 'one', name: 'state-one.json', modifiedTime: 'now' },
+      { id: 'two', name: 'state-two.json', modifiedTime: 'now' },
+    ] });
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('spaces=appDataFolder'),
+      expect.objectContaining({ headers: { Authorization: 'Bearer token' } }),
+    );
+    expect(fetch.mock.calls[0][0]).toContain('appDataFolder');
+    expect(fetch.mock.calls[1][0]).toContain('pageToken=next');
   } finally {
     globalThis.fetch = originalFetch;
   }

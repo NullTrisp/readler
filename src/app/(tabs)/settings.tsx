@@ -1,17 +1,22 @@
 import { router } from 'expo-router';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText, Button, Card, Screen, confirmAction, useReadlerTheme } from '@/components/readler-ui';
 import type { LibraryMode } from '@/domain/models';
-import { deleteAllSynchronizedData } from '@/services/sync';
+import { useNoticeTimeout } from '@/hooks/use-notice-timeout';
 import { signOutDrive } from '@/services/drive';
+import { deleteAllSynchronizedData, deleteLocalAndSynchronizedData } from '@/services/sync';
 import { canLinkFolder, useApp } from '@/state/app-provider';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
   const colors = useReadlerTheme();
-  const { mode, sources, importFiles, linkFolder, changeLibraryMode, disconnectSource, sync, loading } = useApp();
+  const { mode, sources, importFiles, linkFolder, changeLibraryMode, disconnectSource, sync, refresh, loading } = useApp();
+  const [driveAction, setDriveAction] = useState<'signOut' | 'changeAccount' | 'deleteSync' | 'deleteAll' | 'revoke' | null>(null);
+  const [driveNotice, setDriveNotice] = useState<{ error: boolean; message: string } | null>(null);
+  useNoticeTimeout(driveNotice, setDriveNotice);
   const modeName = mode === 'drive' ? t('sourceDrive') : mode === 'local' ? t('sourceLocal') : t('modeUnconfigured');
   const modeHint = t(mode ? 'modeActive' : 'modePreview');
 
@@ -28,6 +33,32 @@ export default function SettingsScreen() {
       t('switchModeAction'),
       change,
     );
+  };
+
+  const runDriveAction = async (
+    action: NonNullable<typeof driveAction>,
+    operation: () => Promise<boolean | number>,
+    success: (result: boolean | number) => string,
+    openDrive = false,
+  ) => {
+    setDriveAction(action);
+    setDriveNotice(null);
+    try {
+      const result = await operation();
+      if (result === false) return;
+      if (openDrive) router.push('/drive');
+      else setDriveNotice({ error: false, message: success(result) });
+    } catch (caught) {
+      setDriveNotice({ error: true, message: caught instanceof Error ? caught.message : String(caught) });
+    } finally {
+      setDriveAction(null);
+    }
+  };
+
+  const deleteAllReadingData = async () => {
+    const deletedSnapshots = await deleteLocalAndSynchronizedData();
+    await refresh();
+    return deletedSnapshots;
   };
 
   return <Screen><ScrollView contentContainerStyle={styles.scroll}>
@@ -80,13 +111,21 @@ export default function SettingsScreen() {
       {mode === 'drive' && sources.some((source) => source.kind === 'drive') && <View style={styles.section}>
         <AppText title accessibilityRole="header">Google Drive</AppText>
         <Card style={styles.driveCard}>
+          {driveNotice && <View
+            accessible
+            accessibilityLiveRegion={driveNotice.error ? 'assertive' : 'polite'}
+            accessibilityRole={driveNotice.error ? 'alert' : undefined}
+          >
+            <AppText style={driveNotice.error ? { color: colors.danger } : undefined}>{driveNotice.message}</AppText>
+          </View>}
           <View style={styles.actions}>
-            <Button secondary onPress={() => void signOutDrive(false)}>{t('signOut')}</Button>
-            <Button secondary onPress={() => void signOutDrive(false).then(() => router.push('/drive'))}>{t('changeAccount')}</Button>
+            <Button disabled={Boolean(driveAction)} loading={driveAction === 'signOut'} secondary onPress={() => void runDriveAction('signOut', () => signOutDrive(false), () => '', true)}>{t('signOut')}</Button>
+            <Button disabled={Boolean(driveAction)} loading={driveAction === 'changeAccount'} secondary onPress={() => void runDriveAction('changeAccount', () => signOutDrive(false), () => '', true)}>{t('changeAccount')}</Button>
           </View>
           <View style={[styles.dangerZone, { borderTopColor: colors.outlineVariant }]}>
-            <Button danger onPress={() => confirmAction(t('deleteSync'), t('deleteSyncHint'), t('cancel'), t('remove'), () => void deleteAllSynchronizedData(), true)}>{t('deleteSync')}</Button>
-            <Button danger onPress={() => confirmAction(t('revoke'), t('revokeHint'), t('cancel'), t('revoke'), () => void signOutDrive(true), true)}>{t('revoke')}</Button>
+            <Button disabled={Boolean(driveAction)} loading={driveAction === 'deleteSync'} danger onPress={() => confirmAction(t('deleteSync'), t('deleteSyncHint'), t('cancel'), t('remove'), () => void runDriveAction('deleteSync', deleteAllSynchronizedData, (result) => t(Number(result) ? 'syncDataDeleted' : 'noSyncData', { count: Number(result) })), true)}>{t('deleteSync')}</Button>
+            <Button disabled={Boolean(driveAction)} loading={driveAction === 'deleteAll'} danger onPress={() => confirmAction(t('deleteAllReadingData'), t('deleteAllReadingDataHint'), t('cancel'), t('remove'), () => void runDriveAction('deleteAll', deleteAllReadingData, () => t('allReadingDataDeleted')), true)}>{t('deleteAllReadingData')}</Button>
+            <Button disabled={Boolean(driveAction)} loading={driveAction === 'revoke'} danger onPress={() => confirmAction(t('revoke'), t('revokeHint'), t('cancel'), t('revoke'), () => void runDriveAction('revoke', () => signOutDrive(true), () => '', true), true)}>{t('revoke')}</Button>
           </View>
         </Card>
       </View>}

@@ -12,6 +12,7 @@ export interface DriveUser {
 type TokenResponse = { access_token?: string; expires_in?: number; error?: string };
 type TokenClient = { requestAccessToken(options?: { prompt?: string }): void };
 type OAuthBridgeResponse = TokenResponse & { type: 'readler-google-oauth'; nonce: string };
+type RevocationResponse = { successful: boolean; error?: string; error_description?: string };
 
 declare global {
   interface Window {
@@ -19,7 +20,7 @@ declare global {
       accounts: {
         oauth2: {
           initTokenClient(config: { client_id: string; scope: string; callback(response: TokenResponse): void }): TokenClient;
-          revoke(token: string, callback: () => void): void;
+          revoke(token: string, callback: (response: RevocationResponse) => void): void;
         };
       };
     };
@@ -29,6 +30,7 @@ declare global {
 let accessToken: string | null = null;
 let expiresAt = 0;
 let pendingToken: Promise<string> | null = null;
+let currentUser: DriveUser | null = null;
 
 export function isGoogleConfigured() {
   return Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
@@ -113,21 +115,33 @@ export async function signInToDrive(): Promise<DriveUser | null> {
   });
   if (!response.ok) throw new Error(`Could not load the Google profile (${response.status}).`);
   const profile = await response.json() as { sub: string; email: string; name: string; picture?: string };
-  return { user: { id: profile.sub, email: profile.email, name: profile.name, photo: profile.picture } };
+  currentUser = { user: { id: profile.sub, email: profile.email, name: profile.name, photo: profile.picture } };
+  return currentUser;
 }
 
 export async function restoreDriveSession(): Promise<DriveUser | null> {
-  return null;
+  return accessToken && Date.now() < expiresAt ? currentUser : null;
 }
 
 export async function signOutDrive(revoke = false) {
-  const token = accessToken;
+  await pendingToken?.catch(() => undefined);
+  if (!revoke) {
+    accessToken = null;
+    expiresAt = 0;
+    currentUser = null;
+    return true;
+  }
+
+  const token = accessToken && Date.now() < expiresAt ? accessToken : await requestToken('');
+  await loadGoogleIdentity();
+  await new Promise<void>((resolve, reject) => window.google!.accounts.oauth2.revoke(token, (response) => {
+    if (response.successful || response.error === 'invalid_token') resolve();
+    else reject(new Error(response.error_description ?? response.error ?? 'Google access could not be revoked.'));
+  }));
   accessToken = null;
   expiresAt = 0;
-  if (revoke && token) {
-    await loadGoogleIdentity();
-    await new Promise<void>((resolve) => window.google!.accounts.oauth2.revoke(token, resolve));
-  }
+  currentUser = null;
+  return true;
 }
 
 export async function getDriveAccessToken() {

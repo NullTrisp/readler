@@ -1,6 +1,6 @@
 import type { ContentSourceRecord, ScanItem } from '@/domain/models';
 import { getDatabase } from '../database';
-import { getLibraryItem, listLibrary, replaceSourceItems, updateItemMetadata } from '../repository';
+import { deleteDriveReadingState, getLibraryItem, listLibrary, replaceSourceItems, updateItemMetadata } from '../repository';
 
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'new-item-id' }));
 jest.mock('../database', () => ({ getDatabase: jest.fn() }));
@@ -170,4 +170,16 @@ describe('metadata updates and search', () => {
     expect(args).toHaveLength(10);
     expect(args).toEqual(Array(10).fill('%adventure%'));
   });
+});
+
+test('deletes only Drive progress and bookmarks', async () => {
+  await deleteDriveReadingState();
+
+  expect(database.withTransactionAsync).toHaveBeenCalledTimes(1);
+  expect(database.runAsync).toHaveBeenCalledTimes(2);
+  expect(database.runAsync.mock.calls[0][0]).toContain('DELETE FROM bookmarks');
+  expect(database.runAsync.mock.calls[1][0]).toContain('DELETE FROM reading_progress');
+  for (const [sql] of database.runAsync.mock.calls) {
+    expect(sql).toContain("s.kind='drive'");
+  }
 });

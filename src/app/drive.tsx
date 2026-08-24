@@ -1,12 +1,12 @@
 import { SymbolView } from 'expo-symbols';
 import { Redirect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { AppText, Button, Card, EmptyState, Screen, useReadlerTheme } from '@/components/readler-ui';
 import { useNoticeTimeout } from '@/hooks/use-notice-timeout';
-import { isGoogleConfigured, listDriveFolders, signInToDrive, type DriveFolder, type DriveUser } from '@/services/drive';
+import { isGoogleConfigured, listDriveFolders, restoreDriveSession, signInToDrive, type DriveFolder, type DriveUser } from '@/services/drive';
 import { useApp } from '@/state/app-provider';
 
 type Crumb = DriveFolder;
@@ -37,6 +37,16 @@ export default function DriveScreen() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!isGoogleConfigured()) return;
+    void restoreDriveSession()
+      .then(async (restored) => {
+        setUser(restored);
+        if (restored) await loadFolders('root');
+      })
+      .catch((caught) => setError(caught instanceof Error ? caught.message : String(caught)));
+  }, [loadFolders]);
 
   const signIn = async () => {
     setLoading(true);
