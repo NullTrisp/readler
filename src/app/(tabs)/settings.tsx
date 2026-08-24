@@ -91,7 +91,7 @@ export default function SettingsScreen() {
         </Card>
       </View>}
       <View accessible style={[styles.footer, { borderTopColor: colors.outlineVariant }]}>
-        <AppText style={styles.footerTitle}>Readler 1.0.0</AppText>
+        <AppText style={styles.footerTitle}>Readler 0.1.0 Alpha</AppText>
         <AppText muted>{'CBZ \u00B7 EPUB \u00B7 PDF'}</AppText>
       </View>
     </View>
